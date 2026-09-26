@@ -357,7 +357,7 @@ Ces routes utilisent une session utilisateur vérifiée. La clé publique intég
 
 Les horaires des vols assurables de démonstration sont définis dans un manifeste partagé par l'application et le script d'amorçage. Ils ne sont plus recalculés avec `Date.now()`, car l'empreinte du vol inclut les heures exactes de départ et d'arrivée. Toute modification du manifeste impose de créer une nouvelle série de marchés.
 
-Le lot initial contient les deux vols futurs `DM042` et `DM117`, chacun décliné sur les cinq seuils, soit dix objets `Market<USDC>`. Chaque objet reçoit 2 USDC de réserve initiale. Les scénarios déjà partis ou arrivés restent visibles dans la démo Flighty ; leur carte d'assurance reste affichée en lecture seule et explique que la souscription est fermée.
+Le lot initial contient les deux vols futurs `DM042` et `DM117`, chacun décliné sur les cinq seuils, soit dix objets `Market<USDC>`. Chaque objet reçoit 1,9 USDC de réserve initiale. Les scénarios déjà partis ou arrivés restent visibles dans la démo Flighty ; leur carte d'assurance reste affichée en lecture seule et explique que la souscription est fermée.
 
 ### Réutilisation du package existant
 

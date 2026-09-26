@@ -8,7 +8,7 @@ import { DEMO_INSURANCE_FLIGHTS } from '@travely/shared/demoMarkets';
 const USDC_TYPE = '0xa1ec7fc00a6f40db9693ad1415d0c193ad3906494428cf252621037bd7117e29::usdc::USDC';
 const CLOCK_ID = '0x6';
 const THRESHOLDS = [1_800_000, 3_600_000, 7_200_000, 14_400_000, 21_600_000] as const;
-const SEED_PER_MARKET = 2_000_000n;
+const SEED_PER_MARKET = 1_900_000n;
 const packageId = process.env.SUI_PACKAGE_ID ?? '';
 const secret = process.env.SUI_OPERATOR_PRIVATE_KEY ?? '';
 

@@ -24,9 +24,9 @@ The shared manifest defines two future fictional flights:
 - `DM042`, CDG–LIS, 15 October 2026;
 - `DM117`, LHR–JFK, 20 October 2026.
 
-Each flight has one market for 30 minutes, 1 hour, 2 hours, 4 hours and 6 hours, for ten `Market<USDC>` objects in total. The seeder contributes 2 test USDC per market and skips combinations already emitted by the package.
+Each flight has one market for 30 minutes, 1 hour, 2 hours, 4 hours and 6 hours, for ten `Market<USDC>` objects in total. The seeder contributes 1.9 test USDC per market and skips combinations already emitted by the package.
 
-Use a dedicated testnet operator address, fund it with at least 20 test USDC through the Circle faucet and enough SUI for gas, then set its testnet-only private key locally:
+Use a dedicated testnet operator address, fund it with at least 19 test USDC through the Circle faucet and enough SUI for gas, then set its testnet-only private key locally:
 
 ```sh
 SUI_PACKAGE_ID=0x... SUI_OPERATOR_PRIVATE_KEY=suiprivkey... \
@@ -34,6 +34,8 @@ SUI_PACKAGE_ID=0x... SUI_OPERATOR_PRIVATE_KEY=suiprivkey... \
 ```
 
 Never commit the operator key or reuse a key that controls real assets. The returned `ResolverCap`, `FeeCap` and LP shares remain owned by that operator address.
+
+The current ten-market batch was created in transaction `6UQjTouGoYnMwwmPd9wZxq1cP7t7gUQDnTFBNkcuQNkT`, with 1.9 test USDC per market.
 
 The flight fingerprint is SHA-256 of `OPERATOR|NUMBER|YYYY-MM-DD|ORIGIN|DESTINATION|DEPARTURE_MS|ARRIVAL_MS`, with identity fields trimmed and uppercased. The app compares it with the onchain fingerprint before allowing an action on a linked flight.
 
