@@ -7,7 +7,7 @@ import * as Crypto from 'expo-crypto';
 
 export const USDC_TYPE = '0xa1ec7fc00a6f40db9693ad1415d0c193ad3906494428cf252621037bd7117e29::usdc::USDC';
 const CLOCK_ID = '0x6';
-export const PACKAGE_ID = process.env.EXPO_PUBLIC_SUI_PACKAGE_ID ?? '0x15b2b349eb5b7ef96ba76fe50db525134b99b86ff38986ad64ba71c879d9805a';
+export const PACKAGE_ID = process.env.EXPO_PUBLIC_SUI_PACKAGE_ID ?? '';
 export const PURCHASE_FEE_BPS = 100n;
 export const SETTLEMENT_FEE_BPS = 50n;
 const BASIS_POINTS = 10_000n;
@@ -281,6 +281,7 @@ export async function findMarket(
   flight: FlightInput,
   thresholdMs: DelayThresholdMs,
 ): Promise<string | null> {
+  if (!/^0x[a-fA-F0-9]{64}$/.test(PACKAGE_ID)) throw new Error('Package Sui non configuré.');
   const expected = toBase64(await flightDigest(flight));
   let before: string | null | undefined;
   for (let pageIndex = 0; pageIndex < 10; pageIndex++) {

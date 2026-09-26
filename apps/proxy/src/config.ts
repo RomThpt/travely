@@ -19,8 +19,7 @@ const envSchema = z.object({
   ENOKI_PRIVATE_API_KEY: z.string().min(1).optional(),
   ENOKI_API_URL: z.string().url().default("https://api.enoki.mystenlabs.com/v1"),
   SUI_RPC_URL: z.string().url().default("https://fullnode.testnet.sui.io:443"),
-  SUI_PACKAGE_ID: z.string().regex(/^0x[a-fA-F0-9]{64}$/)
-    .default("0x15b2b349eb5b7ef96ba76fe50db525134b99b86ff38986ad64ba71c879d9805a"),
+  SUI_PACKAGE_ID: z.string().regex(/^0x[a-fA-F0-9]{64}$/).optional(),
   SUI_USDC_TYPE: z.string().min(1)
     .default("0xa1ec7fc00a6f40db9693ad1415d0c193ad3906494428cf252621037bd7117e29::usdc::USDC"),
   MAX_POSITION_USDC: z.coerce.number().positive().max(10_000).default(100),
@@ -82,6 +81,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if ((parsed.PASSKEY_APPLE_TEAM_ID || parsed.PASSKEY_ANDROID_SHA256_FINGERPRINTS) && !parsed.PASSKEY_RP_ID) {
     throw new Error("Invalid proxy configuration: PASSKEY_RP_ID is required for passkey association files.");
   }
+  if (parsed.ENOKI_PRIVATE_API_KEY && !parsed.SUI_PACKAGE_ID) {
+    throw new Error("Invalid proxy configuration: SUI_PACKAGE_ID is required when Enoki sponsorship is enabled.");
+  }
   if (parsed.PASSKEY_RP_ID && (parsed.PASSKEY_RP_ID.length > 253 ||
     parsed.PASSKEY_RP_ID.split(".").length < 2 ||
     parsed.PASSKEY_RP_ID.split(".").some((label) =>
@@ -121,7 +123,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     sui: {
       network: "testnet",
       rpcUrl: parsed.SUI_RPC_URL,
-      packageId: parsed.SUI_PACKAGE_ID.toLowerCase(),
+      packageId: parsed.SUI_PACKAGE_ID?.toLowerCase() ?? "",
       usdcType: parsed.SUI_USDC_TYPE,
       maxPositionBaseUnits: BigInt(Math.round(parsed.MAX_POSITION_USDC * 1_000_000)),
       enokiApiUrl: parsed.ENOKI_API_URL.replace(/\/$/, ""),

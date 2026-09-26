@@ -22,11 +22,20 @@ describe("loadConfig", () => {
       ...BASE_ENV,
       PROXY_KEY: "0123456789abcdef",
       ENOKI_PRIVATE_API_KEY: "private-enoki-key",
+      SUI_PACKAGE_ID: `0x${"1".repeat(64)}`,
       MAX_POSITION_USDC: "25.5",
     });
     expect(config.sui.usdcType).toContain("::usdc::USDC");
     expect(config.sui.maxPositionBaseUnits).toBe(25_500_000n);
     expect(config.sui.enokiPrivateApiKey).toBe("private-enoki-key");
+  });
+
+  test("requires an explicit package when Enoki sponsorship is enabled", () => {
+    expect(() => loadConfig({
+      ...BASE_ENV,
+      PROXY_KEY: "0123456789abcdef",
+      ENOKI_PRIVATE_API_KEY: "private-enoki-key",
+    })).toThrow(/SUI_PACKAGE_ID/);
   });
 
   test("treats blank provider keys as absent", () => {
