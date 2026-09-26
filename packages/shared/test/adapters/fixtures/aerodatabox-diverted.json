@@ -1,0 +1,27 @@
+[
+  {
+    "number": "UA900",
+    "status": "Diverted",
+    "departure": {
+      "airport": {
+        "iata": "ORD",
+        "name": "Chicago O'Hare",
+        "timeZone": "America/Chicago",
+        "location": { "lat": 41.9786, "lon": -87.9048 }
+      },
+      "scheduledTime": { "utc": "2026-09-12 14:00Z", "local": "2026-09-12 09:00-05:00" }
+    },
+    "arrival": {
+      "airport": {
+        "iata": "JFK",
+        "name": "New York JFK",
+        "timeZone": "America/New_York",
+        "location": { "lat": 40.6413, "lon": -73.7781 }
+      },
+      "scheduledTime": { "utc": "2026-09-12 17:00Z", "local": "2026-09-12 13:00-04:00" },
+      "runwayTime": { "utc": "2026-09-12 18:10Z", "local": "2026-09-12 14:10-04:00" }
+    },
+    "airline": { "name": "United", "iata": "UA" },
+    "greatCircleDistance": { "km": 1150 }
+  }
+]

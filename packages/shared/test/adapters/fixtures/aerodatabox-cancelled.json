@@ -1,0 +1,26 @@
+[
+  {
+    "number": "LH456",
+    "status": "Canceled",
+    "departure": {
+      "airport": {
+        "iata": "MUC",
+        "name": "Munich",
+        "timeZone": "Europe/Berlin",
+        "location": { "lat": 48.3538, "lon": 11.7861 }
+      },
+      "scheduledTime": { "utc": "2026-09-12 07:00Z", "local": "2026-09-12 09:00+02:00" }
+    },
+    "arrival": {
+      "airport": {
+        "iata": "FRA",
+        "name": "Frankfurt",
+        "timeZone": "Europe/Berlin",
+        "location": { "lat": 50.0379, "lon": 8.5622 }
+      },
+      "scheduledTime": { "utc": "2026-09-12 08:00Z", "local": "2026-09-12 10:00+02:00" }
+    },
+    "airline": { "name": "Lufthansa", "iata": "LH" },
+    "greatCircleDistance": { "km": 300 }
+  }
+]

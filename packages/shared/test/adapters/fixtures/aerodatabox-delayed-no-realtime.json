@@ -1,0 +1,26 @@
+[
+  {
+    "number": "KL1234",
+    "status": "Delayed",
+    "departure": {
+      "airport": {
+        "iata": "AMS",
+        "name": "Amsterdam Schiphol",
+        "timeZone": "Europe/Amsterdam",
+        "location": { "lat": 52.3086, "lon": 4.7639 }
+      },
+      "scheduledTime": { "utc": "2026-09-12 06:00Z", "local": "2026-09-12 08:00+02:00" }
+    },
+    "arrival": {
+      "airport": {
+        "iata": "CDG",
+        "name": "Paris Charles de Gaulle",
+        "timeZone": "Europe/Paris",
+        "location": { "lat": 49.0097, "lon": 2.5479 }
+      },
+      "scheduledTime": { "utc": "2026-09-12 07:20Z", "local": "2026-09-12 09:20+02:00" }
+    },
+    "airline": { "name": "KLM", "iata": "KL" },
+    "greatCircleDistance": { "km": 400 }
+  }
+]

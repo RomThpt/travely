@@ -1,0 +1,34 @@
+[
+  {
+    "number": "AF 1180",
+    "callSign": "AFR1180",
+    "status": "Delayed",
+    "departure": {
+      "airport": {
+        "icao": "LFPG",
+        "iata": "CDG",
+        "name": "Paris Charles de Gaulle",
+        "timeZone": "Europe/Paris",
+        "location": { "lat": 49.0097, "lon": 2.5479 }
+      },
+      "scheduledTime": { "utc": "2026-09-12 08:30Z", "local": "2026-09-12 10:30+02:00" },
+      "revisedTime": { "utc": "2026-09-12 08:55Z", "local": "2026-09-12 10:55+02:00" },
+      "terminal": "2E",
+      "gate": "K32"
+    },
+    "arrival": {
+      "airport": {
+        "icao": "LEMD",
+        "iata": "MAD",
+        "name": "Madrid Barajas",
+        "timeZone": "Europe/Madrid",
+        "location": { "lat": 40.4936, "lon": -3.5668 }
+      },
+      "scheduledTime": { "utc": "2026-09-12 10:35Z", "local": "2026-09-12 12:35+02:00" },
+      "revisedTime": { "utc": "2026-09-12 11:22Z", "local": "2026-09-12 13:22+02:00" }
+    },
+    "aircraft": { "model": "Airbus A321", "reg": "F-GTAX" },
+    "airline": { "name": "Air France", "iata": "AF", "icao": "AFR" },
+    "greatCircleDistance": { "km": 1050 }
+  }
+]

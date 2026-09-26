@@ -1,0 +1,26 @@
+[
+  {
+    "number": "LH457",
+    "status": "CanceledUncertain",
+    "departure": {
+      "airport": {
+        "iata": "FRA",
+        "name": "Frankfurt",
+        "timeZone": "Europe/Berlin",
+        "location": { "lat": 50.0379, "lon": 8.5622 }
+      },
+      "scheduledTime": { "utc": "2026-09-12 09:00Z", "local": "2026-09-12 11:00+02:00" }
+    },
+    "arrival": {
+      "airport": {
+        "iata": "MUC",
+        "name": "Munich",
+        "timeZone": "Europe/Berlin",
+        "location": { "lat": 48.3538, "lon": 11.7861 }
+      },
+      "scheduledTime": { "utc": "2026-09-12 10:00Z", "local": "2026-09-12 12:00+02:00" }
+    },
+    "airline": { "name": "Lufthansa", "iata": "LH" },
+    "greatCircleDistance": { "km": 300 }
+  }
+]

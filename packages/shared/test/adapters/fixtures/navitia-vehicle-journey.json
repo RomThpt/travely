@@ -1,0 +1,40 @@
+{
+  "headsign": "6231",
+  "stop_times": [
+    {
+      "stop_point": {
+        "id": "stop_point:SNCF:87686006",
+        "name": "Paris Gare de Lyon",
+        "coord": { "lat": "48.844", "lon": "2.374" },
+        "stop_area": { "id": "stop_area:SNCF:87686006" }
+      },
+      "base_departure_date_time": "20260912T083000",
+      "departure_date_time": "20260912T083000"
+    },
+    {
+      "stop_point": {
+        "id": "stop_point:SNCF:87713040",
+        "name": "Macon Loche",
+        "coord": { "lat": "46.29", "lon": "4.812" },
+        "stop_area": { "id": "stop_area:SNCF:87713040" }
+      },
+      "base_arrival_date_time": "20260912T091500",
+      "arrival_date_time": "20260912T091500",
+      "arrival_status": "on_time",
+      "base_departure_date_time": "20260912T091700",
+      "departure_date_time": "20260912T091700",
+      "departure_status": "on_time"
+    },
+    {
+      "stop_point": {
+        "id": "stop_point:SNCF:87723197",
+        "name": "Lyon Part-Dieu",
+        "coord": { "lat": "45.76", "lon": "4.859" },
+        "stop_area": { "id": "stop_area:SNCF:87723197" }
+      },
+      "base_arrival_date_time": "20260912T095600",
+      "arrival_date_time": "20260912T101000",
+      "arrival_status": "delayed"
+    }
+  ]
+}

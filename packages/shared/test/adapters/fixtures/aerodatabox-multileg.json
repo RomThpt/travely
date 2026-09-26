@@ -1,0 +1,52 @@
+[
+  {
+    "number": "BA123",
+    "status": "Arrived",
+    "departure": {
+      "airport": {
+        "iata": "LHR",
+        "name": "London Heathrow",
+        "timeZone": "Europe/London",
+        "location": { "lat": 51.4700, "lon": -0.4543 }
+      },
+      "scheduledTime": { "utc": "2026-09-12 06:00Z", "local": "2026-09-12 07:00+01:00" },
+      "runwayTime": { "utc": "2026-09-12 06:00Z", "local": "2026-09-12 07:00+01:00" }
+    },
+    "arrival": {
+      "airport": {
+        "iata": "AMS",
+        "name": "Amsterdam Schiphol",
+        "timeZone": "Europe/Amsterdam",
+        "location": { "lat": 52.3086, "lon": 4.7639 }
+      },
+      "scheduledTime": { "utc": "2026-09-12 07:20Z", "local": "2026-09-12 09:20+02:00" },
+      "runwayTime": { "utc": "2026-09-12 07:20Z", "local": "2026-09-12 09:20+02:00" }
+    },
+    "airline": { "name": "British Airways", "iata": "BA" },
+    "greatCircleDistance": { "km": 358 }
+  },
+  {
+    "number": "BA123",
+    "status": "Expected",
+    "departure": {
+      "airport": {
+        "iata": "AMS",
+        "name": "Amsterdam Schiphol",
+        "timeZone": "Europe/Amsterdam",
+        "location": { "lat": 52.3086, "lon": 4.7639 }
+      },
+      "scheduledTime": { "utc": "2026-09-12 09:00Z", "local": "2026-09-12 11:00+02:00" }
+    },
+    "arrival": {
+      "airport": {
+        "iata": "LHR",
+        "name": "London Heathrow",
+        "timeZone": "Europe/London",
+        "location": { "lat": 51.4700, "lon": -0.4543 }
+      },
+      "scheduledTime": { "utc": "2026-09-12 09:25Z", "local": "2026-09-12 10:25+01:00" }
+    },
+    "airline": { "name": "British Airways", "iata": "BA" },
+    "greatCircleDistance": { "km": 358 }
+  }
+]
