@@ -1,0 +1,6 @@
+[install]
+exact = false
+saveTextLockfile = true
+# Expo and React Native need a flat node_modules: the isolated linker makes
+# expo-doctor report duplicated native modules.
+linker = "hoisted"

@@ -1,0 +1,9 @@
+node_modules
+.git
+ios
+android
+.expo
+contracts/out
+contracts/cache
+oracle/workflow/binary.wasm
+.claude

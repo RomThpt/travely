@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  typescript:
+    name: Typecheck, lint, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.8
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run lint
+      - run: bun run test
+
+  sui:
+    name: Sui Move tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install suiup
+        run: cargo install --git https://github.com/MystenLabs/suiup.git --locked
+      - name: Install Sui CLI
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SUIUP_DEFAULT_BIN_DIR: ${{ runner.temp }}/sui-bin
+        run: |
+          suiup install sui@testnet --yes
+          echo "${SUIUP_DEFAULT_BIN_DIR}" >> "${GITHUB_PATH}"
+      - run: sui move test --path sui/flight_delay_market -e testnet

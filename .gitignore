@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+.bun/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Build outputs
+dist/
+build/
+out/
+cache/
+.expo/
+.expo-shared/
+ios/
+android/
+web-build/
+*.wasm
+*.tsbuildinfo
+
+# Proxy runtime cache
+apps/proxy/data/
+
+# Proxy VPS deployment secrets
+deploy/proxy.env
+deploy/.env
+
+# OS and editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Logs
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# Local tooling
+.claude/
