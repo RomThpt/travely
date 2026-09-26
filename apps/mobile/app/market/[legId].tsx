@@ -278,7 +278,15 @@ export default function MarketScreen() {
                 />
               ) : (
                 <Button
-                  label={side ? (fr ? 'Parier OUI' : 'Bet YES') : fr ? 'Parier NON' : 'Bet NO'}
+                  label={
+                    side
+                      ? fr
+                        ? 'Choisir la couverture OUI'
+                        : 'Choose YES coverage'
+                      : fr
+                        ? 'Choisir la couverture NON'
+                        : 'Choose NO coverage'
+                  }
                   loading={busy}
                   disabled={!canTrade}
                   onPress={() => void run(() => buyTx(market, side, mist(quantity)))}

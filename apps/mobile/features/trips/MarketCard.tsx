@@ -27,13 +27,13 @@ export function MarketCard({ leg }: { leg: Leg }) {
 
   return (
     <DetailCard
-      title={french ? 'Parier sur le retard' : 'Bet on the delay'}
+      title={french ? 'Assurance retard' : 'Delay insurance'}
       trailing={<Text style={styles.kicker}>SUI TESTNET</Text>}
     >
       <Text style={styles.body}>
         {french
-          ? 'À partir de quel retard ce vol déclenchera-t-il le pari ?'
-          : 'Which delay threshold will this flight reach?'}
+          ? 'À partir de quel retard souhaitez-vous assurer ce vol ?'
+          : 'From which delay would you like to insure this flight?'}
       </Text>
       <View style={styles.thresholds}>
         {DELAY_THRESHOLDS.map((threshold) => (
@@ -42,8 +42,8 @@ export function MarketCard({ leg }: { leg: Leg }) {
             accessibilityRole="button"
             accessibilityLabel={
               french
-                ? `Parier sur un retard de ${threshold.label} ou plus`
-                : `Bet on a delay of ${threshold.label} or more`
+                ? `Assurer un retard de ${threshold.label} ou plus`
+                : `Insure a delay of ${threshold.label} or more`
             }
             onPress={() => chooseThreshold(threshold.milliseconds)}
             style={({ pressed }) => [styles.threshold, pressed && styles.pressed]}
