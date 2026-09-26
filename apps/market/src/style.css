@@ -3,7 +3,7 @@
 :root { font-family: 'DM Sans', sans-serif; color: #202924; background: #f4f3ee; font-synthesis: none; }
 * { box-sizing: border-box; }
 body { margin: 0; }
-button, input { font: inherit; }
+button, input, select { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .45; }
 .shell { max-width: 1300px; margin: auto; padding: 0 34px; }
@@ -27,8 +27,8 @@ h1 em { color: #3e7756; font-style: normal; }
 .sectionTitle span { display: grid; place-items: center; border: 1px solid #b9c8b9; color: #3e7756; width: 32px; height: 32px; border-radius: 50%; font-size: 11px; }
 h2 { font-size: 23px; letter-spacing: -.03em; font-weight: 600; margin: 0; }
 label { display: grid; gap: 9px; font-size: 10px; text-transform: uppercase; letter-spacing: .09em; color: #6b786e; margin: 16px 0; }
-input { width: 100%; min-height: 44px; border: 1px solid #ccd4ca; background: #fafbf8; color: #202924; border-radius: 2px; padding: 10px 12px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; outline: none; }
-input:focus { border-color: #43865f; box-shadow: 0 0 0 3px #43865f22; }
+input, select { width: 100%; min-height: 44px; border: 1px solid #ccd4ca; background: #fafbf8; color: #202924; border-radius: 2px; padding: 10px 12px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; outline: none; }
+input:focus, select:focus { border-color: #43865f; box-shadow: 0 0 0 3px #43865f22; }
 .statusline { display: flex; justify-content: space-between; align-items: center; margin: 16px 0; }
 a { color: #397751; font-size: 12px; }
 .badge { background: #e5f0e7; color: #2e7048; padding: 7px 10px; border-radius: 2px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; }

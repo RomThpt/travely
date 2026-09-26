@@ -3,7 +3,8 @@ import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { DetailCard, Symbol } from '@/components/ui';
+import { DetailCard } from '@/components/ui';
+import { DELAY_THRESHOLDS, type DelayThresholdMs } from '@/features/market/suiMarket';
 import { legStoreKey } from '@/lib/legKeys';
 import { colors, radii, spacing, typography } from '@/theme';
 
@@ -16,111 +17,77 @@ export function MarketCard({ leg }: { leg: Leg }) {
   const french = language === 'fr';
   const legId = legStoreKey(leg);
 
-  const choose = (side: 'yes' | 'no') => {
+  const chooseThreshold = (thresholdMs: DelayThresholdMs) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    router.push({ pathname: '/market/[legId]', params: { legId, side } });
+    router.push({
+      pathname: '/market/[legId]',
+      params: { legId, threshold: String(thresholdMs) },
+    });
   };
 
   return (
-    <View style={styles.wrapper}>
-      <DetailCard
-        title={french ? 'Protection retard' : 'Delay protection'}
-        trailing={<Text style={styles.kicker}>SUI TESTNET</Text>}
-      >
-        <Text style={styles.body}>
-          {french
-            ? 'Prédisez si ce vol arrivera avec au moins 30 minutes de retard.'
-            : 'Predict whether this flight will arrive at least 30 minutes late.'}
-        </Text>
-
-        <View style={styles.outcomes}>
+    <DetailCard
+      title={french ? 'Parier sur le retard' : 'Bet on the delay'}
+      trailing={<Text style={styles.kicker}>SUI TESTNET</Text>}
+    >
+      <Text style={styles.body}>
+        {french
+          ? 'À partir de quel retard ce vol déclenchera-t-il le pari ?'
+          : 'Which delay threshold will this flight reach?'}
+      </Text>
+      <View style={styles.thresholds}>
+        {DELAY_THRESHOLDS.map((threshold) => (
           <Pressable
+            key={threshold.milliseconds}
             accessibilityRole="button"
-            accessibilityLabel={french ? 'Parier oui, retard de 30 minutes ou plus' : 'Bet yes, delay of 30 minutes or more'}
-            onPress={() => choose('yes')}
-            style={({ pressed }) => [styles.outcome, styles.yes, pressed && styles.pressed]}
+            accessibilityLabel={
+              french
+                ? `Parier sur un retard de ${threshold.label} ou plus`
+                : `Bet on a delay of ${threshold.label} or more`
+            }
+            onPress={() => chooseThreshold(threshold.milliseconds)}
+            style={({ pressed }) => [styles.threshold, pressed && styles.pressed]}
           >
-            <Text style={styles.outcomeAnswer}>{french ? 'OUI' : 'YES'}</Text>
-            <Text style={styles.outcomeDetail}>+30 MIN</Text>
+            <Text style={styles.thresholdLabel}>{threshold.label}</Text>
           </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={french ? 'Parier non, retard inférieur à 30 minutes' : 'Bet no, delay under 30 minutes'}
-            onPress={() => choose('no')}
-            style={({ pressed }) => [styles.outcome, styles.no, pressed && styles.pressed]}
-          >
-            <Text style={styles.outcomeAnswer}>{french ? 'NON' : 'NO'}</Text>
-            <Text style={styles.outcomeDetail}>&lt;30 MIN</Text>
-          </Pressable>
-        </View>
-
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={french ? 'Gérer le marché prédictif' : 'Manage prediction market'}
-          onPress={() => router.push({ pathname: '/market/[legId]', params: { legId } })}
-          style={({ pressed }) => [styles.manage, pressed && styles.pressed]}
-        >
-          <Text style={styles.manageLabel}>
-            {french ? 'Gérer le marché' : 'Manage market'}
-          </Text>
-          <Symbol name="chevron.right" size={12} color={colors.textSecondary} />
-        </Pressable>
-      </DetailCard>
-    </View>
+        ))}
+      </View>
+    </DetailCard>
   );
 }
 
 const styles = StyleSheet.create({
-  wrapper: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.lg,
-  },
-  kicker: { ...typography.monoMicro, color: colors.textTertiary },
-  body: { ...typography.footnote, color: colors.textSecondary },
-  outcomes: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  outcome: {
-    flex: 1,
-    minHeight: 72,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    borderWidth: 1,
-    borderRadius: radii.control,
-  },
-  yes: {
-    borderColor: colors.delayedInk,
-    backgroundColor: colors.delayedSurface,
-  },
-  no: {
-    borderColor: colors.onTimeInk,
-    backgroundColor: colors.onTimeSurface,
-  },
-  outcomeAnswer: {
-    ...typography.headline,
-    color: colors.textPrimary,
-  },
-  outcomeDetail: {
+  kicker: {
     ...typography.monoMicro,
+    color: colors.textTertiary,
+  },
+  body: {
+    ...typography.footnote,
     color: colors.textSecondary,
   },
-  manage: {
-    minHeight: 44,
+  thresholds: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  threshold: {
+    minHeight: 44,
+    minWidth: 64,
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.separatorStrong,
     borderRadius: radii.pill,
     backgroundColor: colors.controlSurface,
   },
-  manageLabel: {
-    ...typography.footnote,
-    fontWeight: '700',
-    color: colors.textSecondary,
+  thresholdLabel: {
+    ...typography.monoFootnoteStrong,
+    color: colors.textPrimary,
   },
   pressed: {
-    opacity: 0.72,
+    borderColor: colors.route,
+    backgroundColor: colors.enRouteSurface,
   },
 });

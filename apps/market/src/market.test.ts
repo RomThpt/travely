@@ -5,6 +5,7 @@ const seeded = {
   arrival_ms: '0',
   cash: '400000000',
   closes_at_ms: '1790412600000',
+  delay_threshold_ms: '1800000',
   flight_hash: 'nDdG6UBJ5raRP8NhjjWfughYi+6FeFma5jsTiSn1duw=',
   id: '0x97239901832c279a3f93b89c86d49fdc12609e794d48d1b44916d29038a5705a',
   lp_supply: '400000000',
@@ -30,6 +31,7 @@ describe('marché Sui', () => {
     });
     expect(hex(digest)).toBe(market.flightHash);
     expect(market.cash).toBe(400_000_000n);
+    expect(market.delayThresholdMs).toBe(1_800_000n);
   });
 
   test('quotes both sides and shifts the price as exposure grows', () => {

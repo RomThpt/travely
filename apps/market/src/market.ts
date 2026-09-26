@@ -4,6 +4,8 @@ export const SUI_TYPE = '0x2::sui::SUI';
 export const CLOCK_ID = '0x6';
 export const PACKAGE_ID = import.meta.env.VITE_MARKET_PACKAGE_ID ?? '';
 export const INITIAL_MARKET_ID = import.meta.env.VITE_MARKET_ID ?? '';
+export const DELAY_THRESHOLDS = [1_800_000, 3_600_000, 7_200_000, 14_400_000, 21_600_000] as const;
+export type DelayThresholdMs = (typeof DELAY_THRESHOLDS)[number];
 
 export interface FlightInput {
   operator: string;
@@ -19,6 +21,7 @@ export interface MarketState {
   id: string;
   status: number;
   flightHash: string;
+  delayThresholdMs: bigint;
   scheduledDepartureMs: bigint;
   scheduledArrivalMs: bigint;
   closesAtMs: bigint;
@@ -112,6 +115,7 @@ export function parseMarket(objectId: string, json: unknown): MarketState {
     id: objectId,
     status: Number(fields.status),
     flightHash: hash(fields.flight_hash),
+    delayThresholdMs: integer(fields.delay_threshold_ms),
     scheduledDepartureMs: integer(fields.scheduled_departure_ms),
     scheduledArrivalMs: integer(fields.scheduled_arrival_ms),
     closesAtMs: integer(fields.closes_at_ms),
@@ -159,7 +163,12 @@ function target(functionName: string): string {
   return `${PACKAGE_ID}::market::${functionName}`;
 }
 
-export function createMarketTx(flight: FlightInput, digest: Uint8Array, seed: bigint): Transaction {
+export function createMarketTx(
+  flight: FlightInput,
+  digest: Uint8Array,
+  thresholdMs: DelayThresholdMs,
+  seed: bigint,
+): Transaction {
   const departure = BigInt(Date.parse(flight.scheduledDeparture));
   const arrival = BigInt(Date.parse(flight.scheduledArrival));
   const closes = departure - 10n * 60_000n;
@@ -172,6 +181,7 @@ export function createMarketTx(flight: FlightInput, digest: Uint8Array, seed: bi
     typeArguments: [SUI_TYPE],
     arguments: [
       tx.pure.vector('u8', digest),
+      tx.pure.u64(thresholdMs),
       tx.pure.u64(departure),
       tx.pure.u64(arrival),
       tx.pure.u64(closes),

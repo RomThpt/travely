@@ -9,10 +9,12 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, Text
 import { Button, Card, Screen, Symbol } from '@/components/ui';
 import { useI18n } from '@/features/settings/useI18n';
 import {
-  DEMO_MARKET_ID, PACKAGE_ID, SUI_TYPE, buyTx, cancelTx, claimTx, client, createMarketTx,
-  createWallet, demoFlight, findMarket, flightDigest, flightFromLeg, importWallet, liquidityTx,
+  DELAY_THRESHOLDS, PACKAGE_ID, SUI_TYPE, buyTx, cancelTx, claimTx, client, createMarketTx,
+  createWallet, delayThresholdLabel, findMarket, flightDigest, flightFromLeg, importWallet,
+  isDelayThreshold, liquidityTx,
   listOwnedMarketObjects, loadWallet, mist, ownedMarketId, parseMarket, parsePosition, parseShare, payout, quote,
-  resolveTx, sui, withdrawTx, type FlightInput, type MarketState, type Position, type Share,
+  resolveTx, sui, withdrawTx, type DelayThresholdMs, type FlightInput, type MarketState,
+  type Position, type Share,
 } from '@/features/market/suiMarket';
 import { useLeg, useNow } from '@/features/trips/queries';
 import { useScreenStatusBar } from '@/lib/statusBar';
@@ -37,31 +39,34 @@ export default function MarketScreen() {
   const { language } = useI18n();
   const fr = language === 'fr';
   const locale = fr ? 'fr-FR' : 'en-US';
-  const { legId: encodedLegId, side: requestedSide } = useLocalSearchParams<{
+  const { legId: encodedLegId, threshold: requestedThreshold } = useLocalSearchParams<{
     legId: string;
-    side?: string;
+    threshold?: string;
   }>();
   const legId = decodeURIComponent(encodedLegId ?? '');
-  const isDemo = legId === 'demo';
+  const parsedThreshold = Number(requestedThreshold);
+  const thresholdMs: DelayThresholdMs = isDelayThreshold(parsedThreshold)
+    ? parsedThreshold
+    : DELAY_THRESHOLDS[0].milliseconds;
+  const thresholdLabel = delayThresholdLabel(thresholdMs);
   const { data: leg } = useLeg(legId);
   const flight = useMemo<FlightInput | null>(() => {
-    if (isDemo) return demoFlight;
     if (!leg || leg.modeName !== 'flight') return null;
     try { return flightFromLeg(leg); } catch { return null; }
-  }, [isDemo, leg]);
+  }, [leg]);
 
   const [wallet, setWallet] = useState<Ed25519Keypair | null>(null);
   const [walletReady, setWalletReady] = useState(false);
   const [balance, setBalance] = useState<bigint | null>(null);
-  const [marketId, setMarketId] = useState(isDemo ? DEMO_MARKET_ID : '');
+  const [marketId, setMarketId] = useState('');
   const [market, setMarket] = useState<MarketState | null>(null);
   const [positions, setPositions] = useState<Position[]>([]);
   const [shares, setShares] = useState<Share[]>([]);
   const [resolverCap, setResolverCap] = useState<string | null>(null);
   const [matched, setMatched] = useState(false);
-  const [lookupBusy, setLookupBusy] = useState(!isDemo);
+  const [lookupBusy, setLookupBusy] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [side, setSide] = useState(requestedSide !== 'no');
+  const [side, setSide] = useState(true);
   const [quantity, setQuantity] = useState('0.1');
   const [seed, setSeed] = useState('0.5');
   const [lpAmount, setLpAmount] = useState('0.1');
@@ -82,14 +87,14 @@ export default function MarketScreen() {
   }, []);
 
   useEffect(() => {
-    if (!flight || isDemo || marketId) return;
+    if (!flight || marketId) return;
     let active = true;
-    void findMarket(flight).then((found) => {
+    void findMarket(flight, thresholdMs).then((found) => {
       if (active && found) setMarketId(found);
     }).catch((cause: unknown) => { if (active) setError(String(cause)); })
       .finally(() => { if (active) setLookupBusy(false); });
     return () => { active = false; };
-  }, [flight, isDemo, marketId]);
+  }, [flight, marketId, thresholdMs]);
 
   const refresh = useCallback(async () => {
     if (!marketId || !flight) return;
@@ -99,7 +104,9 @@ export default function MarketScreen() {
     const digest = await flightDigest(flight);
     const expected = Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
     setMarket(state);
-    setMatched(state.flightHash === expected);
+    setMatched(
+      state.flightHash === expected && state.delayThresholdMs === BigInt(thresholdMs),
+    );
     if (!wallet) { setPositions([]); setShares([]); setResolverCap(null); setBalance(null); return; }
     const owner = wallet.toSuiAddress();
     const [positionPage, sharePage, capPage, funds] = await Promise.all([
@@ -112,7 +119,7 @@ export default function MarketScreen() {
     setShares(sharePage.filter((item) => ownedMarketId(item.json) === marketId).map((item) => parseShare(item.objectId, item.json)));
     setResolverCap(capPage.find((item) => ownedMarketId(item.json) === marketId)?.objectId ?? null);
     setBalance(BigInt(funds.balance.balance));
-  }, [flight, fr, marketId, wallet]);
+  }, [flight, fr, marketId, thresholdMs, wallet]);
 
   const refreshBalance = useCallback(async () => {
     if (!wallet) return;
@@ -148,7 +155,10 @@ export default function MarketScreen() {
       try {
         if (!wallet) throw new Error(fr ? 'Crée un portefeuille testnet.' : 'Create a testnet wallet.');
         const digest = await flightDigest(flight);
-        const result = await client.signAndExecuteTransaction({ transaction: createMarketTx(flight, digest, mist(seed)), signer: wallet });
+        const result = await client.signAndExecuteTransaction({
+          transaction: createMarketTx(flight, digest, thresholdMs, mist(seed)),
+          signer: wallet,
+        });
         if (result.FailedTransaction) throw new Error(result.FailedTransaction.status.error?.message ?? 'Création refusée.');
         const confirmed = await client.waitForTransaction({ digest: result.Transaction.digest, include: { events: true } });
         const event = confirmed.Transaction?.events?.find((item) => item.eventType === `${PACKAGE_ID}::market::MarketCreated`);
@@ -212,7 +222,11 @@ export default function MarketScreen() {
         </View>
         <Text style={styles.title}>{fr ? 'Marché des retards' : 'Delay market'}</Text>
         <Text style={styles.body}>{flight.operator} {flight.number} · {flight.origin} → {flight.destination} · {flight.serviceDate}</Text>
-        <Text style={styles.explainer}>{fr ? 'Le marché paie OUI si l’arrivée finale atteint 30 minutes de retard, NON sinon. Les fournisseurs déposent la réserve qui couvre ces paiements.' : 'YES pays if the final arrival is at least 30 minutes late, NO otherwise. Liquidity providers fund the reserve backing payouts.'}</Text>
+        <Text style={styles.explainer}>
+          {fr
+            ? `OUI paie si l’arrivée atteint ${thresholdLabel} de retard ou plus, NON sinon.`
+            : `YES pays if arrival delay reaches ${thresholdLabel} or more, NO otherwise.`}
+        </Text>
         {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
         {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
@@ -233,7 +247,7 @@ export default function MarketScreen() {
                 onPress={() => setSide(true)}
               >
                 <Text style={styles.sideText}>OUI / YES</Text>
-                <Text style={styles.sideHint}>+30 MIN</Text>
+                <Text style={styles.sideHint}>≥ {thresholdLabel.toUpperCase()}</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
@@ -241,7 +255,7 @@ export default function MarketScreen() {
                 onPress={() => setSide(false)}
               >
                 <Text style={styles.sideText}>NON / NO</Text>
-                <Text style={styles.sideHint}>&lt;30 MIN</Text>
+                <Text style={styles.sideHint}>&lt; {thresholdLabel.toUpperCase()}</Text>
               </Pressable>
             </View>
             <Field
@@ -356,6 +370,7 @@ export default function MarketScreen() {
                 market.status
               ] ?? '—'}
             </Text>
+            <Stat label={fr ? 'Seuil' : 'Threshold'} value={thresholdLabel} />
             <Stat label={fr ? 'Clôture' : 'Closes'} value={dateTime(market.closesAtMs, locale)} />
             <Stat
               label={fr ? 'Réserve disponible' : 'Available reserve'}

@@ -9,8 +9,25 @@ import * as SecureStore from 'expo-secure-store';
 export const SUI_TYPE = '0x2::sui::SUI';
 const CLOCK_ID = '0x6';
 export const PACKAGE_ID = process.env.EXPO_PUBLIC_SUI_PACKAGE_ID ?? '0x15b2b349eb5b7ef96ba76fe50db525134b99b86ff38986ad64ba71c879d9805a';
-export const DEMO_MARKET_ID = process.env.EXPO_PUBLIC_SUI_DEMO_MARKET_ID ?? '0x97239901832c279a3f93b89c86d49fdc12609e794d48d1b44916d29038a5705a';
 const WALLET_KEY = 'travely.sui.testnet.wallet';
+
+export const DELAY_THRESHOLDS = [
+  { minutes: 30, milliseconds: 1_800_000, label: '30 min' },
+  { minutes: 60, milliseconds: 3_600_000, label: '1 h' },
+  { minutes: 120, milliseconds: 7_200_000, label: '2 h' },
+  { minutes: 240, milliseconds: 14_400_000, label: '4 h' },
+  { minutes: 360, milliseconds: 21_600_000, label: '6 h+' },
+] as const;
+
+export type DelayThresholdMs = (typeof DELAY_THRESHOLDS)[number]['milliseconds'];
+
+export function isDelayThreshold(value: number): value is DelayThresholdMs {
+  return DELAY_THRESHOLDS.some((threshold) => threshold.milliseconds === value);
+}
+
+export function delayThresholdLabel(value: number): string {
+  return DELAY_THRESHOLDS.find((threshold) => threshold.milliseconds === value)?.label ?? '—';
+}
 
 export const client = new SuiGrpcClient({
   network: 'testnet',
@@ -36,6 +53,7 @@ export interface MarketState {
   id: string;
   status: number;
   flightHash: string;
+  delayThresholdMs: bigint;
   scheduledArrivalMs: bigint;
   closesAtMs: bigint;
   resolutionDeadlineMs: bigint;
@@ -110,6 +128,7 @@ export function parseMarket(id: string, json: unknown): MarketState {
   const fields = record(json);
   return {
     id, status: Number(fields.status), flightHash: hash(fields.flight_hash),
+    delayThresholdMs: integer(fields.delay_threshold_ms),
     scheduledArrivalMs: integer(fields.scheduled_arrival_ms),
     closesAtMs: integer(fields.closes_at_ms),
     resolutionDeadlineMs: integer(fields.resolution_deadline_ms),
@@ -166,7 +185,12 @@ function target(name: string): string {
   return `${PACKAGE_ID}::market::${name}`;
 }
 
-export function createMarketTx(flight: FlightInput, digest: Uint8Array, seed: bigint): Transaction {
+export function createMarketTx(
+  flight: FlightInput,
+  digest: Uint8Array,
+  thresholdMs: DelayThresholdMs,
+  seed: bigint,
+): Transaction {
   const departure = BigInt(Date.parse(flight.scheduledDeparture));
   const arrival = BigInt(Date.parse(flight.scheduledArrival));
   const closes = departure - 10n * 60_000n;
@@ -176,7 +200,7 @@ export function createMarketTx(flight: FlightInput, digest: Uint8Array, seed: bi
   const [coin] = tx.splitCoins(tx.gas, [tx.pure.u64(seed)]);
   tx.moveCall({
     target: target('create'), typeArguments: [SUI_TYPE],
-    arguments: [tx.pure.vector('u8', digest), tx.pure.u64(departure), tx.pure.u64(arrival), tx.pure.u64(closes), tx.pure.u64(arrival + 24n * 60n * 60_000n), coin, tx.object(CLOCK_ID)],
+    arguments: [tx.pure.vector('u8', digest), tx.pure.u64(thresholdMs), tx.pure.u64(departure), tx.pure.u64(arrival), tx.pure.u64(closes), tx.pure.u64(arrival + 24n * 60n * 60_000n), coin, tx.object(CLOCK_ID)],
   });
   return tx;
 }
@@ -223,18 +247,27 @@ export function resolveTx(marketId: string, capId: string, actualArrival: string
   return tx;
 }
 
-export async function findMarket(flight: FlightInput): Promise<string | null> {
+export async function findMarket(
+  flight: FlightInput,
+  thresholdMs: DelayThresholdMs,
+): Promise<string | null> {
   const expected = toBase64(await flightDigest(flight));
   let before: string | null | undefined;
   for (let pageIndex = 0; pageIndex < 10; pageIndex++) {
     const page = await client.listEvents({ filter: { eventType: `${PACKAGE_ID}::market::MarketCreated` }, order: 'descending', limit: 50, before });
-    const found = page.events.find((event) => (event.json as { flight_hash?: string } | null)?.flight_hash === expected);
+    const found = page.events.find((event) => {
+      const json = event.json as {
+        flight_hash?: string;
+        delay_threshold_ms?: string | number;
+      } | null;
+      return json?.flight_hash === expected && Number(json.delay_threshold_ms) === thresholdMs;
+    });
     const marketId = (found?.json as { market_id?: string } | undefined)?.market_id;
     if (marketId) return marketId;
     if (!page.hasNextPage || !page.endCursor) return null;
     before = page.endCursor;
   }
-  throw new Error('Recherche limitée à 500 marchés récents. Saisis son identifiant si le marché est plus ancien.');
+  throw new Error('Recherche limitée aux 500 marchés les plus récents.');
 }
 
 export async function listOwnedMarketObjects(owner: string, type: string): Promise<{ objectId: string; json: unknown }[]> {

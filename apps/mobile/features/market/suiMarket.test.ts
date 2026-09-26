@@ -9,11 +9,24 @@ mock.module('expo-crypto', () => ({
 }));
 mock.module('expo-secure-store', () => ({}));
 
-const { demoFlight, flightPreimage, flightDigest, mist, sui, quote, payout, parseMarket } = await import('./suiMarket');
+const {
+  DELAY_THRESHOLDS,
+  delayThresholdLabel,
+  demoFlight,
+  flightPreimage,
+  flightDigest,
+  isDelayThreshold,
+  mist,
+  sui,
+  quote,
+  payout,
+  parseMarket,
+} = await import('./suiMarket');
 
 const market = parseMarket('0xmarket', {
   status: 0,
   flight_hash: Array.from(await flightDigest(demoFlight)),
+  delay_threshold_ms: '1800000',
   scheduled_arrival_ms: '1790417400000',
   closes_at_ms: '1790412600000',
   resolution_deadline_ms: '1790503800000',
@@ -27,6 +40,14 @@ const market = parseMarket('0xmarket', {
 test('flight identity commits to the exact scheduled timestamps', () => {
   expect(flightPreimage(demoFlight)).toBe('DEMO|DM042|2026-09-26|HND|KIX|1790413200000|1790417400000');
   expect(market.flightHash).toBe('9c3746e94049e6b6913fc3618e359fba08588bee8578599ae63b138929f576ec');
+  expect(market.delayThresholdMs).toBe(1_800_000n);
+});
+
+test('only the five supported delay thresholds can identify a market', () => {
+  expect(DELAY_THRESHOLDS.map((threshold) => threshold.minutes)).toEqual([30, 60, 120, 240, 360]);
+  expect(isDelayThreshold(7_200_000)).toBe(true);
+  expect(isDelayThreshold(900_000)).toBe(false);
+  expect(delayThresholdLabel(21_600_000)).toBe('6 h+');
 });
 
 test('SUI values retain nine decimal places without floating point', () => {
