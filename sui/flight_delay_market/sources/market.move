@@ -18,6 +18,7 @@ const EInvalidPayment: u64 = 9;
 const EInvalidFlightHash: u64 = 10;
 const ETradingStarted: u64 = 11;
 const EInvalidThreshold: u64 = 12;
+const EClaimsOutstanding: u64 = 13;
 
 const OPEN: u8 = 0;
 const DELAYED: u8 = 1;
@@ -29,6 +30,8 @@ const TWO_HOURS_MS: u64 = 2 * 60 * 60 * 1000;
 const FOUR_HOURS_MS: u64 = 4 * 60 * 60 * 1000;
 const SIX_HOURS_MS: u64 = 6 * 60 * 60 * 1000;
 const PRICE_SCALE: u64 = 10_000;
+const PURCHASE_FEE_BPS: u64 = 100;
+const SETTLEMENT_FEE_BPS: u64 = 50;
 
 /// One binary market for a flight delayed by at least its selected threshold.
 public struct Market<phantom T> has key {
@@ -42,16 +45,21 @@ public struct Market<phantom T> has key {
     status: u8,
     arrival_ms: u64,
     cash: Balance<T>,
+    fees: Balance<T>,
     seed_capital: u64,
     lp_supply: u64,
     yes_exposure: u64,
     no_exposure: u64,
     premiums: u64,
+    purchase_fees: u64,
     outstanding_claims: u64,
 }
 
 /// The holder can report a final arrival for this market.
 public struct ResolverCap has key, store { id: UID, market_id: ID }
+
+/// The holder can withdraw protocol fees after every claim has been settled.
+public struct FeeCap has key, store { id: UID, market_id: ID }
 
 /// LP shares are minted only before the first position is bought.
 public struct LiquidityShare<phantom T> has key, store {
@@ -60,13 +68,14 @@ public struct LiquidityShare<phantom T> has key, store {
     amount: u64,
 }
 
-/// A winning position pays quantity. If resolution fails, it refunds premium.
+/// A winning position pays quantity less fees. Cancellation refunds premium and fee.
 public struct Position<phantom T> has key, store {
     id: UID,
     market_id: ID,
     delayed: bool,
     quantity: u64,
     premium: u64,
+    purchase_fee: u64,
 }
 
 public struct MarketCreated has copy, drop {
@@ -74,6 +83,8 @@ public struct MarketCreated has copy, drop {
     flight_hash: vector<u8>,
     delay_threshold_ms: u64,
     seed_capital: u64,
+    purchase_fee_bps: u64,
+    settlement_fee_bps: u64,
 }
 
 public struct PositionBought has copy, drop {
@@ -83,6 +94,7 @@ public struct PositionBought has copy, drop {
     delayed: bool,
     quantity: u64,
     premium: u64,
+    fee: u64,
 }
 
 public struct MarketResolved has copy, drop {
@@ -95,7 +107,9 @@ public struct PositionClaimed has copy, drop {
     market_id: ID,
     position_id: ID,
     claimant: address,
-    amount: u64,
+    gross_amount: u64,
+    fee: u64,
+    net_amount: u64,
 }
 
 /// A seed coin of any Sui coin type funds the maximum payout liability.
@@ -133,11 +147,13 @@ public fun create<T>(
         status: OPEN,
         arrival_ms: 0,
         cash: coin::into_balance(seed),
+        fees: balance::zero(),
         seed_capital: amount,
         lp_supply: amount,
         yes_exposure: 0,
         no_exposure: 0,
         premiums: 0,
+        purchase_fees: 0,
         outstanding_claims: 0,
     };
     let market_id = object::id(&market);
@@ -146,8 +162,11 @@ public fun create<T>(
         flight_hash: market.flight_hash,
         delay_threshold_ms,
         seed_capital: amount,
+        purchase_fee_bps: PURCHASE_FEE_BPS,
+        settlement_fee_bps: SETTLEMENT_FEE_BPS,
     });
     transfer::public_transfer(ResolverCap { id: object::new(ctx), market_id }, ctx.sender());
+    transfer::public_transfer(FeeCap { id: object::new(ctx), market_id }, ctx.sender());
     transfer::public_transfer(
         LiquidityShare<T> { id: object::new(ctx), market_id, amount },
         ctx.sender(),
@@ -178,6 +197,19 @@ public fun quote<T>(market: &Market<T>, delayed: bool, quantity: u64): u64 {
     (numerator / (PRICE_SCALE as u128)) as u64
 }
 
+public fun purchase_fee<T>(market: &Market<T>, delayed: bool, quantity: u64): u64 {
+    fee_for(quote(market, delayed, quantity), PURCHASE_FEE_BPS)
+}
+
+public fun total_cost<T>(market: &Market<T>, delayed: bool, quantity: u64): u64 {
+    let premium = quote(market, delayed, quantity);
+    premium + fee_for(premium, PURCHASE_FEE_BPS)
+}
+
+public fun net_winning_payout(quantity: u64): u64 {
+    quantity - fee_for(quantity, SETTLEMENT_FEE_BPS)
+}
+
 public fun buy<T>(
     market: &mut Market<T>,
     delayed: bool,
@@ -189,21 +221,27 @@ public fun buy<T>(
     assert!(market.status == OPEN, ENotOpen);
     assert!(clock::timestamp_ms(clock) < market.closes_at_ms, EMarketClosed);
     let premium = quote(market, delayed, quantity);
-    assert!(coin::value(&payment) == premium, EInvalidPayment);
+    let purchase_fee = fee_for(premium, PURCHASE_FEE_BPS);
+    assert!(coin::value(&payment) == premium + purchase_fee, EInvalidPayment);
     let next_yes = market.yes_exposure + if (delayed) quantity else 0;
     let next_no = market.no_exposure + if (delayed) 0 else quantity;
     let worst_case = if (next_yes > next_no) next_yes else next_no;
     assert!(balance::value(&market.cash) + premium >= worst_case, ENotCollateralized);
-    balance::join(&mut market.cash, coin::into_balance(payment));
+    let mut payment_balance = coin::into_balance(payment);
+    let fee_balance = balance::split(&mut payment_balance, purchase_fee);
+    balance::join(&mut market.fees, fee_balance);
+    balance::join(&mut market.cash, payment_balance);
     market.yes_exposure = next_yes;
     market.no_exposure = next_no;
     market.premiums = market.premiums + premium;
+    market.purchase_fees = market.purchase_fees + purchase_fee;
     let position = Position<T> {
         id: object::new(ctx),
         market_id: object::id(market),
         delayed,
         quantity,
         premium,
+        purchase_fee,
     };
     event::emit(PositionBought {
         market_id: object::id(market),
@@ -212,6 +250,7 @@ public fun buy<T>(
         delayed,
         quantity,
         premium,
+        fee: purchase_fee,
     });
     transfer::public_transfer(position, ctx.sender());
 }
@@ -241,6 +280,7 @@ public fun cancel_unresolved<T>(market: &mut Market<T>, clock: &Clock) {
     assert!(market.status == OPEN, ENotOpen);
     assert!(clock::timestamp_ms(clock) > market.resolution_deadline_ms, ETooEarly);
     market.status = CANCELLED;
+    // Only premiums are held in `cash`; purchase fees are reserved in `fees`.
     market.outstanding_claims = market.premiums;
     event::emit(MarketResolved { market_id: object::id(market), status: CANCELLED, arrival_ms: 0 });
 }
@@ -249,26 +289,55 @@ public fun cancel_unresolved<T>(market: &mut Market<T>, clock: &Clock) {
 public fun claim<T>(market: &mut Market<T>, position: Position<T>, ctx: &mut TxContext) {
     assert!(market.status != OPEN, ENotOpen);
     assert!(position.market_id == object::id(market), EWrongMarket);
-    let Position { id, market_id: _, delayed, quantity, premium } = position;
-    let amount = if (market.status == CANCELLED) {
-        premium
+    let Position { id, market_id: _, delayed, quantity, premium, purchase_fee } = position;
+    let gross_amount = if (market.status == CANCELLED) {
+        premium + purchase_fee
     } else if ((market.status == DELAYED && delayed) || (market.status == ON_TIME && !delayed)) {
         quantity
     } else {
         0
     };
-    if (amount > 0) {
-        market.outstanding_claims = market.outstanding_claims - amount;
-        let payout = balance::split(&mut market.cash, amount);
+    let mut settlement_fee = 0;
+    let mut net_amount = gross_amount;
+    if (gross_amount > 0) {
+        let reserved_cash = if (market.status == CANCELLED) premium else gross_amount;
+        market.outstanding_claims = market.outstanding_claims - reserved_cash;
+        let payout = if (market.status == CANCELLED) {
+            let mut refund = balance::split(&mut market.cash, premium);
+            let fee_refund = balance::split(&mut market.fees, purchase_fee);
+            balance::join(&mut refund, fee_refund);
+            refund
+        } else {
+            let mut winning_payout = balance::split(&mut market.cash, gross_amount);
+            settlement_fee = fee_for(gross_amount, SETTLEMENT_FEE_BPS);
+            net_amount = gross_amount - settlement_fee;
+            let fee_balance = balance::split(&mut winning_payout, settlement_fee);
+            balance::join(&mut market.fees, fee_balance);
+            winning_payout
+        };
         transfer::public_transfer(coin::from_balance(payout, ctx), ctx.sender());
     };
     event::emit(PositionClaimed {
         market_id: object::id(market),
         position_id: object::uid_to_inner(&id),
         claimant: ctx.sender(),
-        amount,
+        gross_amount,
+        fee: settlement_fee,
+        net_amount,
     });
     id.delete();
+}
+
+/// Protocol fees stay isolated from market collateral and can only leave after all claims.
+public fun withdraw_fees<T>(market: &mut Market<T>, cap: &FeeCap, ctx: &mut TxContext) {
+    assert!(cap.market_id == object::id(market), EWrongMarket);
+    assert!(market.status != OPEN, ENotOpen);
+    assert!(market.outstanding_claims == 0, EClaimsOutstanding);
+    let amount = balance::value(&market.fees);
+    if (amount > 0) {
+        let fees = balance::split(&mut market.fees, amount);
+        transfer::public_transfer(coin::from_balance(fees, ctx), ctx.sender());
+    };
 }
 
 /// LPs can withdraw only the cash above still-claimable payouts.
@@ -292,6 +361,7 @@ public fun withdraw_liquidity<T>(market: &mut Market<T>, share: LiquidityShare<T
 
 public fun status<T>(market: &Market<T>): u8 { market.status }
 public fun cash<T>(market: &Market<T>): u64 { balance::value(&market.cash) }
+public fun protocol_fees<T>(market: &Market<T>): u64 { balance::value(&market.fees) }
 public fun outstanding_claims<T>(market: &Market<T>): u64 { market.outstanding_claims }
 public fun flight_hash<T>(market: &Market<T>): &vector<u8> { &market.flight_hash }
 public fun delay_threshold_ms<T>(market: &Market<T>): u64 { market.delay_threshold_ms }
@@ -312,4 +382,8 @@ fun price_bps<T>(market: &Market<T>, delayed: bool): u64 {
     let shift = if (raw > 4_000) 4_000 else raw as u64;
     let yes_price = if (yes >= no) 5_000 + shift else 5_000 - shift;
     if (delayed) yes_price else PRICE_SCALE - yes_price
+}
+
+fun fee_for(amount: u64, fee_bps: u64): u64 {
+    if (amount == 0) 0 else ((((amount as u128) * (fee_bps as u128)) + ((PRICE_SCALE - 1) as u128)) / (PRICE_SCALE as u128)) as u64
 }

@@ -1,7 +1,7 @@
 #[test_only]
 module flight_delay_market::market_tests;
 
-use flight_delay_market::market::{Self, LiquidityShare, Market, Position, ResolverCap};
+use flight_delay_market::market::{Self, FeeCap, LiquidityShare, Market, Position, ResolverCap};
 use sui::clock::Clock;
 use sui::coin::{Self, Coin};
 use sui::sui::SUI;
@@ -47,11 +47,13 @@ fun buy_yes(scenario: &mut Scenario) {
     let mut market = scenario.take_shared<Market<SUI>>();
     let clock = scenario.take_shared<Clock>();
     assert!(market::quote(&market, true, 200) == 100);
+    assert!(market::purchase_fee(&market, true, 200) == 1);
+    assert!(market::total_cost(&market, true, 200) == 101);
     market::buy(
         &mut market,
         true,
         200,
-        coin::mint_for_testing<SUI>(100, scenario.ctx()),
+        coin::mint_for_testing<SUI>(101, scenario.ctx()),
         &clock,
         scenario.ctx(),
     );
@@ -94,10 +96,22 @@ fun delayed_flight_pays_yes_and_reserves_claims_from_lp_withdrawal() {
     let position = scenario.take_from_sender<Position<SUI>>();
     market::claim(&mut market, position, scenario.ctx());
     assert!(market::cash(&market) == 0);
+    assert!(market::protocol_fees(&market) == 2);
     test_scenario::return_shared(market);
     scenario.next_tx(TRAVELER);
     let payout = scenario.take_from_sender<Coin<SUI>>();
-    assert!(coin::burn_for_testing(payout) == 200);
+    assert!(coin::burn_for_testing(payout) == 199);
+
+    scenario.next_tx(LP);
+    let mut market = scenario.take_shared<Market<SUI>>();
+    let fee_cap = scenario.take_from_sender<FeeCap>();
+    market::withdraw_fees(&mut market, &fee_cap, scenario.ctx());
+    assert!(market::protocol_fees(&market) == 0);
+    test_scenario::return_to_sender(&scenario, fee_cap);
+    test_scenario::return_shared(market);
+    scenario.next_tx(LP);
+    let fees = scenario.take_from_sender<Coin<SUI>>();
+    assert!(coin::burn_for_testing(fees) == 2);
     scenario.end();
 }
 
@@ -112,7 +126,7 @@ fun on_time_flight_pays_no_position() {
         &mut market,
         false,
         200,
-        coin::mint_for_testing<SUI>(100, scenario.ctx()),
+        coin::mint_for_testing<SUI>(101, scenario.ctx()),
         &clock,
         scenario.ctx(),
     );
@@ -138,7 +152,7 @@ fun on_time_flight_pays_no_position() {
     test_scenario::return_shared(market);
     scenario.next_tx(TRAVELER);
     let payout = scenario.take_from_sender<Coin<SUI>>();
-    assert!(coin::burn_for_testing(payout) == 200);
+    assert!(coin::burn_for_testing(payout) == 199);
     scenario.end();
 }
 
@@ -159,15 +173,26 @@ fun missing_verdict_refunds_premium_and_preserves_seed() {
     test_scenario::return_shared(clock);
     test_scenario::return_shared(market);
 
+    scenario.next_tx(LP);
+    let mut market = scenario.take_shared<Market<SUI>>();
+    let share = scenario.take_from_sender<LiquidityShare<SUI>>();
+    market::withdraw_liquidity(&mut market, share, scenario.ctx());
+    assert!(market::cash(&market) == 100);
+    test_scenario::return_shared(market);
+    scenario.next_tx(LP);
+    let recovered = scenario.take_from_sender<Coin<SUI>>();
+    assert!(coin::burn_for_testing(recovered) == 1_000);
+
     scenario.next_tx(TRAVELER);
     let mut market = scenario.take_shared<Market<SUI>>();
     let position = scenario.take_from_sender<Position<SUI>>();
     market::claim(&mut market, position, scenario.ctx());
-    assert!(market::cash(&market) == 1_000);
+    assert!(market::cash(&market) == 0);
+    assert!(market::protocol_fees(&market) == 0);
     test_scenario::return_shared(market);
     scenario.next_tx(TRAVELER);
     let refund = scenario.take_from_sender<Coin<SUI>>();
-    assert!(coin::burn_for_testing(refund) == 100);
+    assert!(coin::burn_for_testing(refund) == 101);
     scenario.end();
 }
 
@@ -182,7 +207,7 @@ fun undercollateralized_purchase_aborts() {
         &mut market,
         true,
         2_500,
-        coin::mint_for_testing<SUI>(1_250, scenario.ctx()),
+        coin::mint_for_testing<SUI>(1_263, scenario.ctx()),
         &clock,
         scenario.ctx(),
     );
