@@ -1,0 +1,14 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "types": ["react"],
+    "paths": {
+      "@/*": ["./*"],
+      "@travely/shared": ["../../packages/shared/src/index.ts"],
+      "@travely/shared/*": ["../../packages/shared/src/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
+  "exclude": ["node_modules", "ios", "android", "**/*.test.ts", "**/*.test.tsx"]
+}

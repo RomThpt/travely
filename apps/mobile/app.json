@@ -1,0 +1,65 @@
+{
+  "expo": {
+    "name": "Travely",
+    "slug": "travely",
+    "version": "0.1.0",
+    "scheme": "travely",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#000000",
+    "experiments": {
+      "typedRoutes": true
+    },
+    "ios": {
+      "bundleIdentifier": "app.travely.mobile",
+      "usesAppleSignIn": true,
+      "supportsTablet": false,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "app.travely.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#000000",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-localization",
+      "@react-native-community/datetimepicker",
+      "@maplibre/maplibre-react-native",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.4"
+          },
+          "android": {
+            "minSdkVersion": 24,
+            "compileSdkVersion": 36
+          }
+        }
+      ],
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "color": "#0A9CF5"
+        }
+      ],
+      "expo-sharing",
+      "expo-image",
+      "expo-secure-store",
+      "expo-apple-authentication"
+    ]
+  }
+}

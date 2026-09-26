@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Travely, Android themed icon</title>
+  <g transform="translate(174 174) scale(0.66)">
+    <g transform="translate(-24 6)" fill="none" stroke="#000000">
+      <path
+        d="M232 726 C 352 500, 512 356, 664 330"
+        stroke-width="78"
+        stroke-linecap="round"
+      />
+      <circle cx="232" cy="726" r="48" fill="#000000" stroke="none"/>
+      <circle cx="790" cy="316" r="107" stroke-width="44"/>
+    </g>
+  </g>
+</svg>

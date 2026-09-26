@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Travely</title>
+  <rect width="1024" height="1024" fill="#F5F3EE"/>
+  <g transform="translate(-24 6)">
+    <path
+      d="M232 726 C 352 500, 512 356, 664 330"
+      fill="none"
+      stroke="#0F5F73"
+      stroke-width="78"
+      stroke-linecap="round"
+    />
+    <circle cx="232" cy="726" r="48" fill="#0F5F73"/>
+    <circle cx="790" cy="316" r="107" fill="none" stroke="#BB9930" stroke-width="44"/>
+  </g>
+</svg>
