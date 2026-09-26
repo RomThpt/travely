@@ -17,18 +17,24 @@ const EInvalidArrival: u64 = 8;
 const EInvalidPayment: u64 = 9;
 const EInvalidFlightHash: u64 = 10;
 const ETradingStarted: u64 = 11;
+const EInvalidThreshold: u64 = 12;
 
 const OPEN: u8 = 0;
 const DELAYED: u8 = 1;
 const ON_TIME: u8 = 2;
 const CANCELLED: u8 = 3;
-const DELAY_THRESHOLD_MS: u64 = 30 * 60 * 1000;
+const THIRTY_MINUTES_MS: u64 = 30 * 60 * 1000;
+const ONE_HOUR_MS: u64 = 60 * 60 * 1000;
+const TWO_HOURS_MS: u64 = 2 * 60 * 60 * 1000;
+const FOUR_HOURS_MS: u64 = 4 * 60 * 60 * 1000;
+const SIX_HOURS_MS: u64 = 6 * 60 * 60 * 1000;
 const PRICE_SCALE: u64 = 10_000;
 
-/// One binary market for a flight delayed by at least 30 minutes.
+/// One binary market for a flight delayed by at least its selected threshold.
 public struct Market<phantom T> has key {
     id: UID,
     flight_hash: vector<u8>,
+    delay_threshold_ms: u64,
     scheduled_departure_ms: u64,
     scheduled_arrival_ms: u64,
     closes_at_ms: u64,
@@ -66,6 +72,7 @@ public struct Position<phantom T> has key, store {
 public struct MarketCreated has copy, drop {
     market_id: ID,
     flight_hash: vector<u8>,
+    delay_threshold_ms: u64,
     seed_capital: u64,
 }
 
@@ -94,6 +101,7 @@ public struct PositionClaimed has copy, drop {
 /// A seed coin of any Sui coin type funds the maximum payout liability.
 public fun create<T>(
     flight_hash: vector<u8>,
+    delay_threshold_ms: u64,
     scheduled_departure_ms: u64,
     scheduled_arrival_ms: u64,
     closes_at_ms: u64,
@@ -104,18 +112,20 @@ public fun create<T>(
 ) {
     let now = clock::timestamp_ms(clock);
     assert!(flight_hash.length() == 32, EInvalidFlightHash);
+    assert!(valid_threshold(delay_threshold_ms), EInvalidThreshold);
     assert!(
         now < closes_at_ms &&
         closes_at_ms <= scheduled_departure_ms &&
         scheduled_departure_ms < scheduled_arrival_ms,
         EInvalidSchedule,
     );
-    assert!(scheduled_arrival_ms + DELAY_THRESHOLD_MS < resolution_deadline_ms, EInvalidSchedule);
+    assert!(scheduled_arrival_ms + delay_threshold_ms < resolution_deadline_ms, EInvalidSchedule);
     let amount = coin::value(&seed);
     assert!(amount > 0, EInvalidAmount);
     let market = Market<T> {
         id: object::new(ctx),
         flight_hash,
+        delay_threshold_ms,
         scheduled_departure_ms,
         scheduled_arrival_ms,
         closes_at_ms,
@@ -134,6 +144,7 @@ public fun create<T>(
     event::emit(MarketCreated {
         market_id,
         flight_hash: market.flight_hash,
+        delay_threshold_ms,
         seed_capital: amount,
     });
     transfer::public_transfer(ResolverCap { id: object::new(ctx), market_id }, ctx.sender());
@@ -220,7 +231,7 @@ public fun resolve_arrival<T>(
     assert!(now <= market.resolution_deadline_ms, ETooLate);
     assert!(arrival_ms > 0 && arrival_ms <= now, EInvalidArrival);
     market.arrival_ms = arrival_ms;
-    market.status = if (arrival_ms >= market.scheduled_arrival_ms + DELAY_THRESHOLD_MS) DELAYED else ON_TIME;
+    market.status = if (arrival_ms >= market.scheduled_arrival_ms + market.delay_threshold_ms) DELAYED else ON_TIME;
     market.outstanding_claims = if (market.status == DELAYED) market.yes_exposure else market.no_exposure;
     event::emit(MarketResolved { market_id: object::id(market), status: market.status, arrival_ms });
 }
@@ -283,6 +294,15 @@ public fun status<T>(market: &Market<T>): u8 { market.status }
 public fun cash<T>(market: &Market<T>): u64 { balance::value(&market.cash) }
 public fun outstanding_claims<T>(market: &Market<T>): u64 { market.outstanding_claims }
 public fun flight_hash<T>(market: &Market<T>): &vector<u8> { &market.flight_hash }
+public fun delay_threshold_ms<T>(market: &Market<T>): u64 { market.delay_threshold_ms }
+
+fun valid_threshold(threshold_ms: u64): bool {
+    threshold_ms == THIRTY_MINUTES_MS ||
+    threshold_ms == ONE_HOUR_MS ||
+    threshold_ms == TWO_HOURS_MS ||
+    threshold_ms == FOUR_HOURS_MS ||
+    threshold_ms == SIX_HOURS_MS
+}
 
 fun price_bps<T>(market: &Market<T>, delayed: bool): u64 {
     let yes = market.yes_exposure;

@@ -12,9 +12,10 @@ const TRAVELER: address = @0xB;
 const DEPARTURE_MS: u64 = 10_000;
 const ARRIVAL_MS: u64 = 20_000;
 const CLOSE_MS: u64 = 9_000;
-const DEADLINE_MS: u64 = 3_000_000;
+const DEADLINE_MS: u64 = 30_000_000;
+const THIRTY_MINUTES_MS: u64 = 1_800_000;
 
-fun setup(scenario: &mut Scenario) {
+fun setup_with_threshold(scenario: &mut Scenario, threshold_ms: u64) {
     test_scenario::create_system_objects(scenario);
     let mut clock = scenario.take_shared<Clock>();
     clock.set_for_testing(1_000);
@@ -26,6 +27,7 @@ fun setup(scenario: &mut Scenario) {
     };
     market::create<SUI>(
         flight_hash,
+        threshold_ms,
         DEPARTURE_MS,
         ARRIVAL_MS,
         CLOSE_MS,
@@ -35,6 +37,10 @@ fun setup(scenario: &mut Scenario) {
         scenario.ctx(),
     );
     test_scenario::return_shared(clock);
+}
+
+fun setup(scenario: &mut Scenario) {
+    setup_with_threshold(scenario, THIRTY_MINUTES_MS);
 }
 
 fun buy_yes(scenario: &mut Scenario) {
@@ -67,6 +73,7 @@ fun delayed_flight_pays_yes_and_reserves_claims_from_lp_withdrawal() {
     clock.set_for_testing(2_000_000);
     market::resolve_arrival(&mut market, &cap, 1_820_000, &clock);
     assert!(market::status(&market) == 1);
+    assert!(market::delay_threshold_ms(&market) == THIRTY_MINUTES_MS);
     assert!(market::outstanding_claims(&market) == 200);
     test_scenario::return_to_sender(&scenario, cap);
     test_scenario::return_shared(clock);
@@ -181,5 +188,31 @@ fun undercollateralized_purchase_aborts() {
     );
     test_scenario::return_shared(market);
     test_scenario::return_shared(clock);
+    scenario.end();
+}
+
+#[test]
+fun selected_threshold_controls_resolution() {
+    let mut scenario = test_scenario::begin(LP);
+    setup_with_threshold(&mut scenario, 2 * 60 * 60 * 1000);
+
+    scenario.next_tx(LP);
+    let mut market = scenario.take_shared<Market<SUI>>();
+    let cap = scenario.take_from_sender<ResolverCap>();
+    let mut clock = scenario.take_shared<Clock>();
+    clock.set_for_testing(8_000_000);
+    market::resolve_arrival(&mut market, &cap, ARRIVAL_MS + 60 * 60 * 1000, &clock);
+    assert!(market::status(&market) == 2);
+    assert!(market::delay_threshold_ms(&market) == 2 * 60 * 60 * 1000);
+    test_scenario::return_to_sender(&scenario, cap);
+    test_scenario::return_shared(clock);
+    test_scenario::return_shared(market);
+    scenario.end();
+}
+
+#[test, expected_failure(abort_code = 12, location = flight_delay_market::market)]
+fun unsupported_threshold_aborts() {
+    let mut scenario = test_scenario::begin(LP);
+    setup_with_threshold(&mut scenario, 15 * 60 * 1000);
     scenario.end();
 }
