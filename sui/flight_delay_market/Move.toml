@@ -1,0 +1,6 @@
+[package]
+name = "flight_delay_market"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
