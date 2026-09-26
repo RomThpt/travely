@@ -1,15 +1,16 @@
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { SuiGrpcClient } from '@mysten/sui/grpc';
 import { Transaction } from '@mysten/sui/transactions';
 import { fromBase64, fromHex, toBase64 } from '@mysten/sui/utils';
+import { DEMO_INSURANCE_FLIGHTS } from '@travely/shared/demoMarkets';
 import type { Leg } from '@travely/shared/trip';
 import * as Crypto from 'expo-crypto';
-import * as SecureStore from 'expo-secure-store';
 
-export const SUI_TYPE = '0x2::sui::SUI';
+export const USDC_TYPE = '0xa1ec7fc00a6f40db9693ad1415d0c193ad3906494428cf252621037bd7117e29::usdc::USDC';
 const CLOCK_ID = '0x6';
 export const PACKAGE_ID = process.env.EXPO_PUBLIC_SUI_PACKAGE_ID ?? '0x15b2b349eb5b7ef96ba76fe50db525134b99b86ff38986ad64ba71c879d9805a';
-const WALLET_KEY = 'travely.sui.testnet.wallet';
+export const PURCHASE_FEE_BPS = 100n;
+export const SETTLEMENT_FEE_BPS = 50n;
+const BASIS_POINTS = 10_000n;
 
 export const DELAY_THRESHOLDS = [
   { minutes: 30, milliseconds: 1_800_000, label: '30 min' },
@@ -44,10 +45,7 @@ export interface FlightInput {
   scheduledArrival: string;
 }
 
-export const demoFlight: FlightInput = {
-  operator: 'DEMO', number: 'DM042', serviceDate: '2026-09-26', origin: 'HND', destination: 'KIX',
-  scheduledDeparture: '2026-09-26T18:00:00+09:00', scheduledArrival: '2026-09-26T19:10:00+09:00',
-};
+export const demoFlight: FlightInput = { ...DEMO_INSURANCE_FLIGHTS[0] };
 
 export interface MarketState {
   id: string;
@@ -58,13 +56,21 @@ export interface MarketState {
   closesAtMs: bigint;
   resolutionDeadlineMs: bigint;
   cash: bigint;
+  protocolFees: bigint;
   seedCapital: bigint;
   yesExposure: bigint;
   noExposure: bigint;
+  purchaseFees: bigint;
   outstandingClaims: bigint;
 }
 
-export interface Position { id: string; delayed: boolean; quantity: bigint; premium: bigint }
+export interface Position {
+  id: string;
+  delayed: boolean;
+  quantity: bigint;
+  premium: bigint;
+  purchaseFee: bigint;
+}
 export interface Share { id: string; amount: bigint }
 
 export function flightFromLeg(leg: Leg): FlightInput {
@@ -132,15 +138,23 @@ export function parseMarket(id: string, json: unknown): MarketState {
     scheduledArrivalMs: integer(fields.scheduled_arrival_ms),
     closesAtMs: integer(fields.closes_at_ms),
     resolutionDeadlineMs: integer(fields.resolution_deadline_ms),
-    cash: integer(fields.cash), seedCapital: integer(fields.seed_capital),
+    cash: integer(fields.cash), protocolFees: integer(fields.fees),
+    seedCapital: integer(fields.seed_capital),
     yesExposure: integer(fields.yes_exposure), noExposure: integer(fields.no_exposure),
+    purchaseFees: integer(fields.purchase_fees),
     outstandingClaims: integer(fields.outstanding_claims),
   };
 }
 
 export function parsePosition(id: string, json: unknown): Position {
   const fields = record(json);
-  return { id, delayed: Boolean(fields.delayed), quantity: integer(fields.quantity), premium: integer(fields.premium) };
+  return {
+    id,
+    delayed: Boolean(fields.delayed),
+    quantity: integer(fields.quantity),
+    premium: integer(fields.premium),
+    purchaseFee: integer(fields.purchase_fee),
+  };
 }
 
 export function parseShare(id: string, json: unknown): Share {
@@ -151,16 +165,20 @@ export function ownedMarketId(json: unknown): string {
   return objectId(record(json).market_id);
 }
 
-export function mist(input: string): bigint {
-  if (!/^(?:0|[1-9]\d*)(?:\.\d{1,9})?$/.test(input)) throw new Error('Montant SUI invalide (9 décimales maximum).');
+export function microUsdc(input: string): bigint {
+  if (!/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/.test(input)) throw new Error('Montant USDC invalide (6 décimales maximum).');
   const [whole, fraction = ''] = input.split('.');
-  return BigInt(whole) * 1_000_000_000n + BigInt(fraction.padEnd(9, '0'));
+  return BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, '0'));
 }
 
-export function sui(amount: bigint): string {
-  const whole = amount / 1_000_000_000n;
-  const fraction = (amount % 1_000_000_000n).toString().padStart(9, '0').replace(/0+$/, '');
+export function usdc(amount: bigint): string {
+  const whole = amount / 1_000_000n;
+  const fraction = (amount % 1_000_000n).toString().padStart(6, '0').replace(/0+$/, '');
   return fraction ? `${whole}.${fraction}` : whole.toString();
+}
+
+function feeFor(amount: bigint, basisPoints: bigint): bigint {
+  return amount === 0n ? 0n : (amount * basisPoints + BASIS_POINTS - 1n) / BASIS_POINTS;
 }
 
 export function quote(market: MarketState, delayed: boolean, quantity: bigint): bigint {
@@ -173,10 +191,22 @@ export function quote(market: MarketState, delayed: boolean, quantity: bigint): 
   return (quantity * (delayed ? yesPrice : 10_000n - yesPrice) + 9_999n) / 10_000n;
 }
 
+export function purchaseFee(premium: bigint): bigint {
+  return feeFor(premium, PURCHASE_FEE_BPS);
+}
+
+export function totalCost(premium: bigint): bigint {
+  return premium + purchaseFee(premium);
+}
+
+export function settlementFee(quantity: bigint): bigint {
+  return feeFor(quantity, SETTLEMENT_FEE_BPS);
+}
+
 export function payout(market: MarketState, position: Position): bigint {
-  if (market.status === 3) return position.premium;
-  if (market.status === 1 && position.delayed) return position.quantity;
-  if (market.status === 2 && !position.delayed) return position.quantity;
+  if (market.status === 3) return position.premium + position.purchaseFee;
+  if (market.status === 1 && position.delayed) return position.quantity - settlementFee(position.quantity);
+  if (market.status === 2 && !position.delayed) return position.quantity - settlementFee(position.quantity);
   return 0n;
 }
 
@@ -197,9 +227,9 @@ export function createMarketTx(
   if (closes <= BigInt(Date.now())) throw new Error('Le marché doit être créé au moins 10 minutes avant le départ.');
   if (seed <= 0n) throw new Error('La liquidité initiale doit être positive.');
   const tx = new Transaction();
-  const [coin] = tx.splitCoins(tx.gas, [tx.pure.u64(seed)]);
+  const coin = tx.coin({ balance: seed, type: USDC_TYPE, useGasCoin: false });
   tx.moveCall({
-    target: target('create'), typeArguments: [SUI_TYPE],
+    target: target('create'), typeArguments: [USDC_TYPE],
     arguments: [tx.pure.vector('u8', digest), tx.pure.u64(thresholdMs), tx.pure.u64(departure), tx.pure.u64(arrival), tx.pure.u64(closes), tx.pure.u64(arrival + 24n * 60n * 60_000n), coin, tx.object(CLOCK_ID)],
   });
   return tx;
@@ -208,34 +238,34 @@ export function createMarketTx(
 export function buyTx(market: MarketState, delayed: boolean, quantity: bigint): Transaction {
   const premium = quote(market, delayed, quantity);
   const tx = new Transaction();
-  const [payment] = tx.splitCoins(tx.gas, [tx.pure.u64(premium)]);
-  tx.moveCall({ target: target('buy'), typeArguments: [SUI_TYPE], arguments: [tx.object(market.id), tx.pure.bool(delayed), tx.pure.u64(quantity), payment, tx.object(CLOCK_ID)] });
+  const payment = tx.coin({ balance: totalCost(premium), type: USDC_TYPE, useGasCoin: false });
+  tx.moveCall({ target: target('buy'), typeArguments: [USDC_TYPE], arguments: [tx.object(market.id), tx.pure.bool(delayed), tx.pure.u64(quantity), payment, tx.object(CLOCK_ID)] });
   return tx;
 }
 
 export function liquidityTx(marketId: string, amount: bigint): Transaction {
   if (amount <= 0n) throw new Error('La liquidité doit être positive.');
   const tx = new Transaction();
-  const [coin] = tx.splitCoins(tx.gas, [tx.pure.u64(amount)]);
-  tx.moveCall({ target: target('add_liquidity'), typeArguments: [SUI_TYPE], arguments: [tx.object(marketId), coin, tx.object(CLOCK_ID)] });
+  const coin = tx.coin({ balance: amount, type: USDC_TYPE, useGasCoin: false });
+  tx.moveCall({ target: target('add_liquidity'), typeArguments: [USDC_TYPE], arguments: [tx.object(marketId), coin, tx.object(CLOCK_ID)] });
   return tx;
 }
 
 export function claimTx(marketId: string, positionId: string): Transaction {
   const tx = new Transaction();
-  tx.moveCall({ target: target('claim'), typeArguments: [SUI_TYPE], arguments: [tx.object(marketId), tx.object(positionId)] });
+  tx.moveCall({ target: target('claim'), typeArguments: [USDC_TYPE], arguments: [tx.object(marketId), tx.object(positionId)] });
   return tx;
 }
 
 export function withdrawTx(marketId: string, shareId: string): Transaction {
   const tx = new Transaction();
-  tx.moveCall({ target: target('withdraw_liquidity'), typeArguments: [SUI_TYPE], arguments: [tx.object(marketId), tx.object(shareId)] });
+  tx.moveCall({ target: target('withdraw_liquidity'), typeArguments: [USDC_TYPE], arguments: [tx.object(marketId), tx.object(shareId)] });
   return tx;
 }
 
 export function cancelTx(marketId: string): Transaction {
   const tx = new Transaction();
-  tx.moveCall({ target: target('cancel_unresolved'), typeArguments: [SUI_TYPE], arguments: [tx.object(marketId), tx.object(CLOCK_ID)] });
+  tx.moveCall({ target: target('cancel_unresolved'), typeArguments: [USDC_TYPE], arguments: [tx.object(marketId), tx.object(CLOCK_ID)] });
   return tx;
 }
 
@@ -243,7 +273,7 @@ export function resolveTx(marketId: string, capId: string, actualArrival: string
   const timestamp = Date.parse(actualArrival);
   if (!Number.isFinite(timestamp) || timestamp <= 0) throw new Error('Arrivée finale invalide.');
   const tx = new Transaction();
-  tx.moveCall({ target: target('resolve_arrival'), typeArguments: [SUI_TYPE], arguments: [tx.object(marketId), tx.object(capId), tx.pure.u64(timestamp), tx.object(CLOCK_ID)] });
+  tx.moveCall({ target: target('resolve_arrival'), typeArguments: [USDC_TYPE], arguments: [tx.object(marketId), tx.object(capId), tx.pure.u64(timestamp), tx.object(CLOCK_ID)] });
   return tx;
 }
 
@@ -281,23 +311,4 @@ export async function listOwnedMarketObjects(owner: string, type: string): Promi
     if (!page.cursor || page.cursor === cursor) throw new Error('Pagination des objets Sui interrompue.');
     cursor = page.cursor;
   } while (true);
-}
-
-export async function loadWallet(): Promise<Ed25519Keypair | null> {
-  const secret = await SecureStore.getItemAsync(WALLET_KEY);
-  return secret ? Ed25519Keypair.fromSecretKey(secret) : null;
-}
-
-export async function createWallet(): Promise<Ed25519Keypair> {
-  if (!(await SecureStore.isAvailableAsync())) throw new Error('Stockage sécurisé indisponible sur cet appareil.');
-  const wallet = Ed25519Keypair.fromSecretKey(await Crypto.getRandomBytesAsync(32));
-  await SecureStore.setItemAsync(WALLET_KEY, wallet.getSecretKey(), { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY });
-  return wallet;
-}
-
-export async function importWallet(secret: string): Promise<Ed25519Keypair> {
-  if (!(await SecureStore.isAvailableAsync())) throw new Error('Stockage sécurisé indisponible sur cet appareil.');
-  const wallet = Ed25519Keypair.fromSecretKey(secret.trim());
-  await SecureStore.setItemAsync(WALLET_KEY, wallet.getSecretKey(), { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY });
-  return wallet;
 }

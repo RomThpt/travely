@@ -1,4 +1,5 @@
 import { haversineKm, interpolatePosition } from '@travely/shared/geo';
+import { DEMO_INSURANCE_FLIGHTS } from '@travely/shared/demoMarkets';
 import { legId } from '@travely/shared/trip';
 import type { Leg, Place, Stop, Timing, Trip } from '@travely/shared/trip';
 import { Mode } from '@travely/shared/types';
@@ -9,9 +10,8 @@ import { serviceDateFor, startOfLocalDay } from '@/lib/localDate';
 import { places } from './places';
 
 /**
- * The demo catalogue. Everything is built relative to `now` so the app always shows a
- * flight in the air, something running late and a finished leg to stamp, whichever day
- * it is opened.
+ * The demo catalogue mixes relative journeys with two stable future flights whose
+ * insurance markets can be seeded once on testnet.
  *
  * Every identity uses the fictional `DEMO` operator and `DM`-prefixed numbers so demo
  * services remain distinct from real travel records.
@@ -135,9 +135,8 @@ export function buildDemoCatalogue(now: number = Date.now()): DemoCatalogue {
     now,
   );
 
-  // 2. Boarding in forty minutes, arriving forty-seven minutes late.
-  const lisScheduledDeparture = now + 40 * MINUTE;
-  const lisDuration = 2 * HOUR + 40 * MINUTE;
+  // 2. Stable future flight whose onchain markets are seeded ahead of the demo.
+  const lisFixture = DEMO_INSURANCE_FLIGHTS[0];
   const delayed = buildLeg(
     {
       mode: Mode.Flight,
@@ -146,16 +145,13 @@ export function buildDemoCatalogue(now: number = Date.now()): DemoCatalogue {
       origin: places.CDG,
       destination: places.LIS,
       departure: {
-        scheduled: iso(lisScheduledDeparture),
-        estimated: iso(lisScheduledDeparture + 47 * MINUTE),
+        scheduled: lisFixture.scheduledDeparture,
       },
       arrival: {
-        scheduled: iso(lisScheduledDeparture + lisDuration),
-        estimated: iso(lisScheduledDeparture + lisDuration + 47 * MINUTE),
+        scheduled: lisFixture.scheduledArrival,
       },
-      liveStatus: 'delayed',
-      delayMinutes: 47,
-      delayReason: 'Late arrival of the inbound aircraft',
+      liveStatus: 'scheduled',
+      delayMinutes: 0,
       terminal: '2F',
       gate: 'K28',
       vehicle: { model: 'Airbus A320neo', registration: 'F-DEMOB', callsign: 'DEM042' },
@@ -302,8 +298,9 @@ export function buildDemoCatalogue(now: number = Date.now()): DemoCatalogue {
   );
 
   // 7 and 8. One trip in two legs: the tunnel to London, then the Atlantic.
-  const eurostarDeparture =
-    startOfLocalDay(now + 5 * DAY, places.PNO.tz) + 8 * HOUR + 13 * MINUTE;
+  const atlanticFixture = DEMO_INSURANCE_FLIGHTS[1];
+  const atlanticDeparture = Date.parse(atlanticFixture.scheduledDeparture);
+  const eurostarDeparture = atlanticDeparture - 6 * HOUR - 47 * MINUTE;
   const eurostar = buildLeg(
     {
       mode: Mode.Train,
@@ -335,7 +332,6 @@ export function buildDemoCatalogue(now: number = Date.now()): DemoCatalogue {
     now,
   );
 
-  const atlanticDeparture = eurostarDeparture + 6 * HOUR + 47 * MINUTE;
   const atlantic = buildLeg(
     {
       mode: Mode.Flight,
@@ -344,7 +340,7 @@ export function buildDemoCatalogue(now: number = Date.now()): DemoCatalogue {
       origin: places.LHR,
       destination: places.JFK,
       departure: { scheduled: iso(atlanticDeparture) },
-      arrival: { scheduled: iso(atlanticDeparture + 8 * HOUR + 5 * MINUTE) },
+      arrival: { scheduled: atlanticFixture.scheduledArrival },
       liveStatus: 'scheduled',
       delayMinutes: 0,
       terminal: '5',

@@ -16,6 +16,14 @@ const envSchema = z.object({
   PASSKEY_RP_ID: z.string().min(1).optional(),
   PASSKEY_APPLE_TEAM_ID: z.string().min(1).optional(),
   PASSKEY_ANDROID_SHA256_FINGERPRINTS: z.string().min(1).optional(),
+  ENOKI_PRIVATE_API_KEY: z.string().min(1).optional(),
+  ENOKI_API_URL: z.string().url().default("https://api.enoki.mystenlabs.com/v1"),
+  SUI_RPC_URL: z.string().url().default("https://fullnode.testnet.sui.io:443"),
+  SUI_PACKAGE_ID: z.string().regex(/^0x[a-fA-F0-9]{64}$/)
+    .default("0x15b2b349eb5b7ef96ba76fe50db525134b99b86ff38986ad64ba71c879d9805a"),
+  SUI_USDC_TYPE: z.string().min(1)
+    .default("0xa1ec7fc00a6f40db9693ad1415d0c193ad3906494428cf252621037bd7117e29::usdc::USDC"),
+  MAX_POSITION_USDC: z.coerce.number().positive().max(10_000).default(100),
 });
 
 export type Config = {
@@ -33,6 +41,15 @@ export type Config = {
     appleTeamId?: string;
     androidFingerprints: string[];
   } | undefined;
+  sui: {
+    network: "testnet";
+    rpcUrl: string;
+    packageId: string;
+    usdcType: string;
+    maxPositionBaseUnits: bigint;
+    enokiApiUrl: string;
+    enokiPrivateApiKey?: string;
+  };
 };
 
 function withoutBlankValues(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
@@ -101,5 +118,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
         androidFingerprints,
       }
       : undefined,
+    sui: {
+      network: "testnet",
+      rpcUrl: parsed.SUI_RPC_URL,
+      packageId: parsed.SUI_PACKAGE_ID.toLowerCase(),
+      usdcType: parsed.SUI_USDC_TYPE,
+      maxPositionBaseUnits: BigInt(Math.round(parsed.MAX_POSITION_USDC * 1_000_000)),
+      enokiApiUrl: parsed.ENOKI_API_URL.replace(/\/$/, ""),
+      ...(parsed.ENOKI_PRIVATE_API_KEY
+        ? { enokiPrivateApiKey: parsed.ENOKI_PRIVATE_API_KEY }
+        : {}),
+    },
   };
 }

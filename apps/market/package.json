@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "bun test"
+    "test": "bun test",
+    "seed:demo": "bun scripts/seed-demo.ts"
   },
   "dependencies": {
     "@mysten/dapp-kit-react": "^1.0.0",

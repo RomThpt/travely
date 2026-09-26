@@ -6,8 +6,10 @@ import { checkedArrival } from './resolution';
 const market = parseMarket('0x97239901832c279a3f93b89c86d49fdc12609e794d48d1b44916d29038a5705a', {
   cash: '450000000', closes_at_ms: '1790412600000',
   delay_threshold_ms: '1800000',
+  fees: '0',
   flight_hash: 'nDdG6UBJ5raRP8NhjjWfughYi+6FeFma5jsTiSn1duw=',
   no_exposure: '0', outstanding_claims: '0', premiums: '50000000',
+  purchase_fees: '0',
   resolution_deadline_ms: '1790503800000', scheduled_arrival_ms: '1790417400000',
   scheduled_departure_ms: '1790413200000', seed_capital: '400000000',
   status: 0, yes_exposure: '100000000',

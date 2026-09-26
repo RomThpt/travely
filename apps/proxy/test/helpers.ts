@@ -1,6 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { AirportsIndex } from "../src/airports";
 import { createApp } from "../src/app";
 import { Cache } from "../src/cache";
@@ -28,6 +29,14 @@ export function buildDeps(overrides: DepsOverrides = {}): AppDeps {
     dataDir,
     fixturesDir: new URL("../../../fixtures", import.meta.url).pathname,
     rateLimitPerIpPerMin: 60,
+    sui: {
+      network: "testnet",
+      rpcUrl: "https://fullnode.testnet.sui.io:443",
+      packageId: "0x" + "1".repeat(64),
+      usdcType: "0x" + "2".repeat(64) + "::usdc::USDC",
+      maxPositionBaseUnits: 100_000_000n,
+      enokiApiUrl: "https://api.enoki.mystenlabs.com/v1",
+    },
     ...overrides.config,
   };
   const { config: _configOverride, ...rest } = overrides;
@@ -40,6 +49,7 @@ export function buildDeps(overrides: DepsOverrides = {}): AppDeps {
     fetchImpl: fetch,
     now: () => new Date("2026-09-12T09:00:00Z"),
     startedAtMs: Date.now(),
+    suiClient: new SuiGrpcClient({ network: "testnet", baseUrl: config.sui.rpcUrl }),
     ...rest,
   };
   return deps;

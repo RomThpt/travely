@@ -4,3 +4,4 @@ export * from "./trip";
 export * from "./geo";
 export * from "./weather";
 export * from "./operators";
+export * from "./demoMarkets";

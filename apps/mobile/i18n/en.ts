@@ -292,6 +292,7 @@ export const en = {
     languageSystem: 'System',
     languageEnglish: 'English',
     languageFrench: 'French',
+    usdcBalance: 'USDC balance and top-up',
     about: 'About',
     version: 'Version %{version}',
   },

@@ -34,6 +34,15 @@ describe('demo catalogue identities', () => {
     expect(ids.size).toBe(legs.length);
   });
 
+  test('insurable demo flights keep the fixed onchain identity', () => {
+    const dm042 = legs.find((leg) => leg.identity.number === 'DM042');
+    const dm117 = legs.find((leg) => leg.identity.number === 'DM117');
+    expect(dm042?.departure.scheduled).toBe('2026-10-15T16:00:00.000Z');
+    expect(dm042?.arrival.scheduled).toBe('2026-10-15T18:40:00.000Z');
+    expect(dm117?.departure.scheduled).toBe('2026-10-20T14:00:00.000Z');
+    expect(dm117?.arrival.scheduled).toBe('2026-10-20T22:05:00.000Z');
+  });
+
   test('serviceDate is the departure date in the origin zone', () => {
     for (const leg of legs) {
       const expected = serviceDateFor(Date.parse(leg.departure.scheduled), leg.origin.tz);
@@ -69,7 +78,7 @@ describe('demo catalogue identities', () => {
     expect(localTime(byNumber('DM812').departure.scheduled, 'Europe/Paris')).toBe('19:00');
     expect(localTime(byNumber('DM1204').departure.scheduled, 'Europe/Paris')).toBe('21:30');
     expect(localTime(byNumber('DM334').departure.scheduled, 'Europe/London')).toBe('18:25');
-    expect(localTime(byNumber('DM9024').departure.scheduled, 'Europe/Paris')).toBe('08:13');
+    expect(localTime(byNumber('DM9024').departure.scheduled, 'Europe/Paris')).toBe('09:13');
   });
 
   test('the catalogue covers every mode and both multi-leg and past trips', () => {

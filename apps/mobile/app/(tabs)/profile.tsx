@@ -1,5 +1,6 @@
 import Constants from 'expo-constants';
 import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -19,6 +20,7 @@ const LANGUAGE_OPTIONS: { value: LanguagePreference; labelKey: string }[] = [
 
 export default function ProfileScreen() {
   const { t } = useI18n();
+  const router = useRouter();
   const {
     session, signOut, passkeyAvailable, passkeyEnabled, passkeyBusy, passkeyError,
     enablePasskey, disablePasskey, lockNow,
@@ -44,6 +46,9 @@ export default function ProfileScreen() {
           <Card>
             <Text style={styles.rowLabel}>{session.provider === 'apple' ? 'Apple' : 'Google'}</Text>
             <Text style={styles.address} selectable>{session.address}</Text>
+            <Pressable accessibilityRole="button" onPress={() => router.push('/balance')} style={styles.passkeyAction}>
+              <Text style={styles.passkeyActionLabel}>{t('profile.usdcBalance')}</Text>
+            </Pressable>
             <Pressable accessibilityRole="button" onPress={() => void signOut()} style={styles.signOut}>
               <Text style={styles.signOutLabel}>{t('auth.signOut')}</Text>
             </Pressable>

@@ -11,6 +11,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@mysten/sui": "^2.0.0",
     "@travely/shared": "workspace:*",
     "hono": "^4.6.0",
     "jose": "^6.2.12",

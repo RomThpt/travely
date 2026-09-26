@@ -1,9 +1,10 @@
 import { ConnectButton, useCurrentAccount, useCurrentClient, useDAppKit } from '@mysten/dapp-kit-react';
+import { DEMO_INSURANCE_FLIGHTS } from '@travely/shared/demoMarkets';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   INITIAL_MARKET_ID,
   PACKAGE_ID,
-  SUI_TYPE,
+  USDC_TYPE,
   DELAY_THRESHOLDS,
   addLiquidityTx,
   buyTx,
@@ -12,14 +13,18 @@ import {
   createMarketTx,
   flightHash,
   hex,
-  mist,
+  microUsdc,
   parseMarket,
   parsePosition,
   parseShare,
+  payout,
   positionMarketId,
+  purchaseFee,
   quote,
   resolveTx,
-  sui,
+  settlementFee,
+  totalCost,
+  usdc,
   withdrawTx,
   type FlightInput,
   type DelayThresholdMs,
@@ -43,12 +48,7 @@ const thresholdLabel = (thresholdMs: number | bigint) => {
 };
 
 function initialFlight(): FlightInput {
-  if (!params.has('operator') && INITIAL_MARKET_ID === '0x97239901832c279a3f93b89c86d49fdc12609e794d48d1b44916d29038a5705a') {
-    return {
-      operator: 'DEMO', number: 'DM042', serviceDate: '2026-09-26', origin: 'HND', destination: 'KIX',
-      scheduledDeparture: '2026-09-26T18:00:00+09:00', scheduledArrival: '2026-09-26T19:10:00+09:00',
-    };
-  }
+  if (!params.has('operator')) return { ...DEMO_INSURANCE_FLIGHTS[0] };
   return {
     operator: params.get('operator') ?? '',
     number: params.get('number') ?? '',
@@ -93,12 +93,12 @@ export function App() {
     if (account) {
       const page = await client.listOwnedObjects({
         owner: account.address,
-        type: `${PACKAGE_ID}::market::Position<${SUI_TYPE}>`,
+        type: `${PACKAGE_ID}::market::Position<${USDC_TYPE}>`,
         include: { json: true },
       });
       setPositions(page.objects.filter((owned) => positionMarketId(owned.json) === marketId).map((owned) => parsePosition(owned.objectId, owned.json)));
       const [sharePage, capPage] = await Promise.all([
-        client.listOwnedObjects({ owner: account.address, type: `${PACKAGE_ID}::market::LiquidityShare<${SUI_TYPE}>`, include: { json: true } }),
+        client.listOwnedObjects({ owner: account.address, type: `${PACKAGE_ID}::market::LiquidityShare<${USDC_TYPE}>`, include: { json: true } }),
         client.listOwnedObjects({ owner: account.address, type: `${PACKAGE_ID}::market::ResolverCap`, include: { json: true } }),
       ]);
       setShares(sharePage.objects.filter((owned) => positionMarketId(owned.json) === marketId).map((owned) => parseShare(owned.objectId, owned.json)));
@@ -152,9 +152,18 @@ export function App() {
       .catch(() => setMatched(false));
   }, [flight, market, thresholdMs]);
 
-  const premium = useMemo(() => {
+  const quoteDetails = useMemo(() => {
     if (!market || market.status !== 0) return null;
-    try { return quote(market, side, mist(quantity)); } catch { return null; }
+    try {
+      const coverage = microUsdc(quantity);
+      const premium = quote(market, side, coverage);
+      return {
+        premium,
+        purchaseFee: purchaseFee(premium),
+        total: totalCost(premium),
+        netPayout: coverage - settlementFee(coverage),
+      };
+    } catch { return null; }
   }, [market, quantity, side]);
 
   const execute = async (makeTx: () => ReturnType<typeof buyTx>, after?: (digest: string) => Promise<void>) => {
@@ -185,7 +194,7 @@ export function App() {
       if (!account) throw new Error('Connecte un portefeuille Sui sur testnet.');
       const digest = await flightHash(flight);
       const result = await dAppKit.signAndExecuteTransaction({
-        transaction: createMarketTx(flight, digest, thresholdMs, mist(seed)),
+        transaction: createMarketTx(flight, digest, thresholdMs, microUsdc(seed)),
       });
       if (result.FailedTransaction) throw new Error(result.FailedTransaction.status.error?.message ?? 'Création refusée.');
       const confirmed = await client.waitForTransaction({ digest: result.Transaction.digest, include: { events: true } });
@@ -196,7 +205,7 @@ export function App() {
       const url = new URL(location.href);
       url.searchParams.set('market', id);
       history.replaceState(null, '', url);
-      setNotice(`Marché créé et amorcé avec ${seed} SUI. Transaction : ${short(result.Transaction.digest)}`);
+      setNotice(`Marché créé et amorcé avec ${seed} USDC. Transaction : ${short(result.Transaction.digest)}`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -211,12 +220,12 @@ export function App() {
     <main className="shell">
       <header className="topbar">
         <div><strong className="brand">TRAVELY</strong><span className="eyebrow"> / MARCHÉ DES RETARDS</span></div>
-        <div className="wallet"><span className="network">SUI TESTNET</span><ConnectButton /></div>
+        <div className="wallet"><span className="network">USDC · SUI TESTNET</span><ConnectButton /></div>
       </header>
 
       <section className="hero">
         <div><p className="kicker">Un trajet. Deux issues. Une réserve commune.</p><h1>Un vol en retard de<br /><em>{thresholdLabel(thresholdMs)} ou plus ?</em></h1>
-          <p>Le marché engage des SUI de test. Les positions OUI sont payées si l’arrivée finale dépasse le seuil. Les positions NON sont payées sinon.</p></div>
+          <p>La protection utilise des USDC de test. Les couvertures OUI sont versées si l’arrivée finale dépasse le seuil. Les couvertures NON sont versées sinon.</p></div>
         <div className="heroMeta"><span>01 / 03</span><strong>Marché binaire</strong><span>Résolution après l’arrivée réelle</span></div>
       </section>
 
@@ -230,7 +239,7 @@ export function App() {
           <label>Identifiant du marché sur Sui<input value={marketId} onChange={(event) => setMarketId(event.target.value.trim())} placeholder="0x…" /></label>
           {market ? <>
             <div className="statusline"><span className={`badge status${market.status}`}>{['Ouvert', 'Retard confirmé', 'À l’heure', 'Annulé'][market.status]}</span><a href={`https://suiscan.xyz/testnet/object/${market.id}`} target="_blank" rel="noreferrer">Voir sur Sui</a></div>
-            <div className="stats"><div><small>Seuil</small><strong>{thresholdLabel(market.delayThresholdMs)}</strong></div><div><small>Clôture</small><strong>{formatTime(market.closesAtMs)}</strong></div><div><small>Liquidité</small><strong>{sui(market.cash)} SUI</strong></div><div><small>Réserve due</small><strong>{sui(market.outstandingClaims)} SUI</strong></div></div>
+            <div className="stats"><div><small>Seuil</small><strong>{thresholdLabel(market.delayThresholdMs)}</strong></div><div><small>Clôture</small><strong>{formatTime(market.closesAtMs)}</strong></div><div><small>Liquidité</small><strong>{usdc(market.cash)} USDC</strong></div><div><small>Réserve due</small><strong>{usdc(market.outstandingClaims)} USDC</strong></div></div>
             {matched === true && <p className="validation">{flight.operator} {flight.number} · {flight.origin}–{flight.destination} · identité vérifiée par l’empreinte du marché.</p>}
             {matched === false && <p className="warning">Les détails du vol renseigné ne correspondent pas à ce marché. Vérifie les horaires dans le formulaire avant d’agir.</p>}
             {matched === null && <p className="warning">Renseigne le vol dans le formulaire pour vérifier son empreinte avant d’agir.</p>}
@@ -241,10 +250,13 @@ export function App() {
         <section className="panel">
           <div className="sectionTitle"><span>02</span><h2>Prendre position</h2></div>
           <div className="segmented"><button className={side ? 'selected' : ''} onClick={() => setSide(true)}>OUI · retard ≥ {thresholdLabel(thresholdMs)}</button><button className={!side ? 'selected' : ''} onClick={() => setSide(false)}>NON · retard &lt; {thresholdLabel(thresholdMs)}</button></div>
-          <label>Paiement si gagnant, en SUI<input inputMode="decimal" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>
-          <div className="quote"><span>Prix actuel</span><strong>{premium === null ? '—' : `${sui(premium)} SUI`}</strong></div>
+          <label>Versement brut si gagnant, en USDC<input inputMode="decimal" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>
+          <div className="quote"><span>Prime actuelle</span><strong>{quoteDetails === null ? '—' : `${usdc(quoteDetails.premium)} USDC`}</strong></div>
+          <div className="quote"><span>Frais d’achat · 1 %</span><strong>{quoteDetails === null ? '—' : `${usdc(quoteDetails.purchaseFee)} USDC`}</strong></div>
+          <div className="quote"><span>Total débité</span><strong>{quoteDetails === null ? '—' : `${usdc(quoteDetails.total)} USDC`}</strong></div>
+          <div className="quote"><span>Versement net potentiel</span><strong>{quoteDetails === null ? '—' : `${usdc(quoteDetails.netPayout)} USDC`}</strong></div>
           <p className="muted">Le prix est recalculé dans le contrat. Il varie avec l’exposition du marché. Une transaction dont le prix a changé échoue sans achat.</p>
-          <button className="primary" disabled={!canTrade || busy || premium === null} onClick={() => market && void execute(() => buyTx(market, side, mist(quantity)))}>Acheter une position</button>
+          <button className="primary" disabled={!canTrade || busy || quoteDetails === null} onClick={() => market && void execute(() => buyTx(market, side, microUsdc(quantity)))}>Souscrire la couverture</button>
           {market?.status === 0 && market.resolutionDeadlineMs < BigInt(Date.now()) && <button className="plain" disabled={!account || busy} onClick={() => void execute(() => cancelTx(market.id))}>Annuler le marché sans résultat</button>}
         </section>
 
@@ -252,16 +264,19 @@ export function App() {
           <div className="sectionTitle"><span>03</span><h2>Mes positions</h2></div>
           {!account && <p className="muted">Connecte ton portefeuille pour voir les positions et réclamer les versements.</p>}
           {account && positions.length === 0 && <p className="muted">Aucune position pour ce marché sur ce portefeuille.</p>}
-          {positions.map((position) => <div className="position" key={position.id}><div><strong>{position.delayed ? 'OUI' : 'NON'} · {sui(position.quantity)} SUI</strong><small>Mise {sui(position.premium)} SUI · {short(position.id)}</small></div><button disabled={busy || market?.status === 0} onClick={() => void execute(() => claimTx(marketId, position.id))}>Réclamer</button></div>)}
-          <p className="muted">Après résolution : la bonne issue reçoit le montant affiché, l’autre reçoit zéro. Si aucune arrivée n’est rapportée avant l’échéance, chaque mise est remboursée.</p>
+          {positions.map((position) => {
+            const due = market ? payout(market, position) : 0n;
+            return <div className="position" key={position.id}><div><strong>{position.delayed ? 'OUI' : 'NON'} · {usdc(position.quantity)} USDC</strong><small>Prime et frais {usdc(position.premium + position.purchaseFee)} USDC · {short(position.id)}</small></div><button disabled={busy || market?.status === 0 || due === 0n} onClick={() => void execute(() => claimTx(marketId, position.id))}>{market?.status && due === 0n ? 'Aucun versement' : 'Recevoir'}</button></div>;
+          })}
+          <p className="muted">Après résolution, la bonne issue reçoit le montant brut moins 0,5 % de frais de règlement. Si aucune arrivée n’est rapportée avant l’échéance, la prime et ses frais d’achat sont remboursés.</p>
         </section>
 
         <section className="panel">
           <div className="sectionTitle"><span>LP</span><h2>Fournir la liquidité</h2></div>
           <p className="muted">Les fonds couvrent le versement maximal. Les parts de liquidité sont des objets Sui transférables. Un apport supplémentaire est possible seulement avant le premier achat.</p>
-          <label>Apport supplémentaire, en SUI<input inputMode="decimal" value={lpAmount} onChange={(event) => setLpAmount(event.target.value)} /></label>
-          <button className="secondary" disabled={!account || !market || market.status !== 0 || market.yesExposure !== 0n || market.noExposure !== 0n || matched !== true || busy} onClick={() => void execute(() => addLiquidityTx(marketId, mist(lpAmount)))}>Ajouter de la liquidité</button>
-          {shares.map((share) => <div className="position" key={share.id}><div><strong>Part LP · {sui(share.amount)} SUI</strong><small>{short(share.id)}</small></div><button disabled={busy || market?.status === 0} onClick={() => void execute(() => withdrawTx(marketId, share.id))}>Retirer</button></div>)}
+          <label>Apport supplémentaire, en USDC<input inputMode="decimal" value={lpAmount} onChange={(event) => setLpAmount(event.target.value)} /></label>
+          <button className="secondary" disabled={!account || !market || market.status !== 0 || market.yesExposure !== 0n || market.noExposure !== 0n || matched !== true || busy} onClick={() => void execute(() => addLiquidityTx(marketId, microUsdc(lpAmount)))}>Ajouter de la liquidité</button>
+          {shares.map((share) => <div className="position" key={share.id}><div><strong>Part LP · {usdc(share.amount)} USDC</strong><small>{short(share.id)}</small></div><button disabled={busy || market?.status === 0} onClick={() => void execute(() => withdrawTx(marketId, share.id))}>Retirer</button></div>)}
           <p className="muted">Le retrait est possible après la résolution ou l’annulation, en conservant les paiements encore dus.</p>
         </section>
       </div>
@@ -280,7 +295,7 @@ export function App() {
           {(['operator', 'number', 'serviceDate', 'origin', 'destination', 'scheduledDeparture', 'scheduledArrival'] as const).map((field) =>
             <label key={field}>{({ operator: 'Compagnie', number: 'Numéro de vol', serviceDate: 'Date de service', origin: 'Départ IATA', destination: 'Arrivée IATA', scheduledDeparture: 'Départ prévu (ISO)', scheduledArrival: 'Arrivée prévue (ISO)' })[field]}<input value={flight[field]} onChange={(event) => setField(field, event.target.value)} placeholder={field === 'scheduledDeparture' || field === 'scheduledArrival' ? '2026-09-25T10:00:00+09:00' : ''} /></label>
           )}
-          <label>Liquidité initiale (SUI)<input inputMode="decimal" value={seed} onChange={(event) => setSeed(event.target.value)} /></label>
+          <label>Liquidité initiale (USDC)<input inputMode="decimal" value={seed} onChange={(event) => setSeed(event.target.value)} /></label>
           <label>Seuil du retard<select value={thresholdMs} onChange={(event) => setThresholdMs(Number(event.target.value) as DelayThresholdMs)}>{DELAY_THRESHOLDS.map((value) => <option key={value} value={value}>{thresholdLabel(value)}</option>)}</select></label>
         </div>
         <button className="primary" disabled={!account || busy || !PACKAGE_ID} onClick={() => void create()}>Créer et amorcer sur testnet</button>

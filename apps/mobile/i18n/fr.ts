@@ -296,6 +296,7 @@ export const fr: Translations = {
     languageSystem: 'Système',
     languageEnglish: 'Anglais',
     languageFrench: 'Français',
+    usdcBalance: 'Solde et recharge USDC',
     about: 'À propos',
     version: 'Version %{version}',
   },

@@ -1,11 +1,14 @@
 import { Transaction } from '@mysten/sui/transactions';
 
-export const SUI_TYPE = '0x2::sui::SUI';
+export const USDC_TYPE = '0xa1ec7fc00a6f40db9693ad1415d0c193ad3906494428cf252621037bd7117e29::usdc::USDC';
 export const CLOCK_ID = '0x6';
 export const PACKAGE_ID = import.meta.env.VITE_MARKET_PACKAGE_ID ?? '';
 export const INITIAL_MARKET_ID = import.meta.env.VITE_MARKET_ID ?? '';
 export const DELAY_THRESHOLDS = [1_800_000, 3_600_000, 7_200_000, 14_400_000, 21_600_000] as const;
 export type DelayThresholdMs = (typeof DELAY_THRESHOLDS)[number];
+export const PURCHASE_FEE_BPS = 100n;
+export const SETTLEMENT_FEE_BPS = 50n;
+const BASIS_POINTS = 10_000n;
 
 export interface FlightInput {
   operator: string;
@@ -27,10 +30,12 @@ export interface MarketState {
   closesAtMs: bigint;
   resolutionDeadlineMs: bigint;
   cash: bigint;
+  protocolFees: bigint;
   seedCapital: bigint;
   yesExposure: bigint;
   noExposure: bigint;
   premiums: bigint;
+  purchaseFees: bigint;
   outstandingClaims: bigint;
 }
 
@@ -39,6 +44,7 @@ export interface OwnedPosition {
   delayed: boolean;
   quantity: bigint;
   premium: bigint;
+  purchaseFee: bigint;
 }
 
 export interface OwnedShare {
@@ -46,17 +52,17 @@ export interface OwnedShare {
   amount: bigint;
 }
 
-export function mist(input: string): bigint {
-  if (!/^(?:0|[1-9]\d*)(?:\.\d{1,9})?$/.test(input)) {
-    throw new Error('Saisis un montant SUI positif avec au plus 9 décimales.');
+export function microUsdc(input: string): bigint {
+  if (!/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/.test(input)) {
+    throw new Error('Saisis un montant USDC positif avec au plus 6 décimales.');
   }
   const [whole, fraction = ''] = input.split('.');
-  return BigInt(whole) * 1_000_000_000n + BigInt(fraction.padEnd(9, '0'));
+  return BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, '0'));
 }
 
-export function sui(amount: bigint): string {
-  const whole = amount / 1_000_000_000n;
-  const fraction = (amount % 1_000_000_000n).toString().padStart(9, '0').replace(/0+$/, '');
+export function usdc(amount: bigint): string {
+  const whole = amount / 1_000_000n;
+  const fraction = (amount % 1_000_000n).toString().padStart(6, '0').replace(/0+$/, '');
   return fraction ? `${whole}.${fraction}` : whole.toString();
 }
 
@@ -121,10 +127,12 @@ export function parseMarket(objectId: string, json: unknown): MarketState {
     closesAtMs: integer(fields.closes_at_ms),
     resolutionDeadlineMs: integer(fields.resolution_deadline_ms),
     cash: integer(fields.cash),
+    protocolFees: integer(fields.fees),
     seedCapital: integer(fields.seed_capital),
     yesExposure: integer(fields.yes_exposure),
     noExposure: integer(fields.no_exposure),
     premiums: integer(fields.premiums),
+    purchaseFees: integer(fields.purchase_fees),
     outstandingClaims: integer(fields.outstanding_claims),
   };
 }
@@ -136,6 +144,7 @@ export function parsePosition(objectId: string, json: unknown): OwnedPosition {
     delayed: Boolean(fields.delayed),
     quantity: integer(fields.quantity),
     premium: integer(fields.premium),
+    purchaseFee: integer(fields.purchase_fee),
   };
 }
 
@@ -158,6 +167,21 @@ export function quote(market: MarketState, delayed: boolean, quantity: bigint): 
   return (quantity * price + 9_999n) / 10_000n;
 }
 
+function feeFor(amount: bigint, basisPoints: bigint): bigint {
+  return amount === 0n ? 0n : (amount * basisPoints + BASIS_POINTS - 1n) / BASIS_POINTS;
+}
+
+export const purchaseFee = (premium: bigint) => feeFor(premium, PURCHASE_FEE_BPS);
+export const totalCost = (premium: bigint) => premium + purchaseFee(premium);
+export const settlementFee = (quantity: bigint) => feeFor(quantity, SETTLEMENT_FEE_BPS);
+
+export function payout(market: MarketState, position: OwnedPosition): bigint {
+  if (market.status === 3) return position.premium + position.purchaseFee;
+  if (market.status === 1 && position.delayed) return position.quantity - settlementFee(position.quantity);
+  if (market.status === 2 && !position.delayed) return position.quantity - settlementFee(position.quantity);
+  return 0n;
+}
+
 function target(functionName: string): string {
   if (!/^0x[a-fA-F0-9]{64}$/.test(PACKAGE_ID)) throw new Error('Package Sui non configuré.');
   return `${PACKAGE_ID}::market::${functionName}`;
@@ -175,10 +199,10 @@ export function createMarketTx(
   if (closes <= BigInt(Date.now())) throw new Error('Le marché doit être créé au moins 10 minutes avant le départ.');
   if (seed <= 0n) throw new Error('La liquidité initiale doit être positive.');
   const tx = new Transaction();
-  const [coin] = tx.splitCoins(tx.gas, [tx.pure.u64(seed)]);
+  const coin = tx.coin({ balance: seed, type: USDC_TYPE, useGasCoin: false });
   tx.moveCall({
     target: target('create'),
-    typeArguments: [SUI_TYPE],
+    typeArguments: [USDC_TYPE],
     arguments: [
       tx.pure.vector('u8', digest),
       tx.pure.u64(thresholdMs),
@@ -196,10 +220,10 @@ export function createMarketTx(
 export function buyTx(market: MarketState, delayed: boolean, quantity: bigint): Transaction {
   const premium = quote(market, delayed, quantity);
   const tx = new Transaction();
-  const [payment] = tx.splitCoins(tx.gas, [tx.pure.u64(premium)]);
+  const payment = tx.coin({ balance: totalCost(premium), type: USDC_TYPE, useGasCoin: false });
   tx.moveCall({
     target: target('buy'),
-    typeArguments: [SUI_TYPE],
+    typeArguments: [USDC_TYPE],
     arguments: [tx.object(market.id), tx.pure.bool(delayed), tx.pure.u64(quantity), payment, tx.object(CLOCK_ID)],
   });
   return tx;
@@ -208,10 +232,10 @@ export function buyTx(market: MarketState, delayed: boolean, quantity: bigint): 
 export function addLiquidityTx(marketId: string, amount: bigint): Transaction {
   if (amount <= 0n) throw new Error('La liquidité doit être positive.');
   const tx = new Transaction();
-  const [coin] = tx.splitCoins(tx.gas, [tx.pure.u64(amount)]);
+  const coin = tx.coin({ balance: amount, type: USDC_TYPE, useGasCoin: false });
   tx.moveCall({
     target: target('add_liquidity'),
-    typeArguments: [SUI_TYPE],
+    typeArguments: [USDC_TYPE],
     arguments: [tx.object(marketId), coin, tx.object(CLOCK_ID)],
   });
   return tx;
@@ -221,7 +245,7 @@ export function claimTx(marketId: string, positionId: string): Transaction {
   const tx = new Transaction();
   tx.moveCall({
     target: target('claim'),
-    typeArguments: [SUI_TYPE],
+    typeArguments: [USDC_TYPE],
     arguments: [tx.object(marketId), tx.object(positionId)],
   });
   return tx;
@@ -229,7 +253,7 @@ export function claimTx(marketId: string, positionId: string): Transaction {
 
 export function cancelTx(marketId: string): Transaction {
   const tx = new Transaction();
-  tx.moveCall({ target: target('cancel_unresolved'), typeArguments: [SUI_TYPE], arguments: [tx.object(marketId), tx.object(CLOCK_ID)] });
+  tx.moveCall({ target: target('cancel_unresolved'), typeArguments: [USDC_TYPE], arguments: [tx.object(marketId), tx.object(CLOCK_ID)] });
   return tx;
 }
 
@@ -239,7 +263,7 @@ export function resolveTx(marketId: string, capId: string, actualArrival: string
   const tx = new Transaction();
   tx.moveCall({
     target: target('resolve_arrival'),
-    typeArguments: [SUI_TYPE],
+    typeArguments: [USDC_TYPE],
     arguments: [tx.object(marketId), tx.object(capId), tx.pure.u64(timestamp), tx.object(CLOCK_ID)],
   });
   return tx;
@@ -249,7 +273,7 @@ export function withdrawTx(marketId: string, shareId: string): Transaction {
   const tx = new Transaction();
   tx.moveCall({
     target: target('withdraw_liquidity'),
-    typeArguments: [SUI_TYPE],
+    typeArguments: [USDC_TYPE],
     arguments: [tx.object(marketId), tx.object(shareId)],
   });
   return tx;

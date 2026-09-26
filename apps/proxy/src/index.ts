@@ -1,4 +1,5 @@
 import path from "node:path";
+import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { createApp } from "./app";
 import { AirportsIndex, loadAirportsIndex } from "./airports";
 import { Cache } from "./cache";
@@ -25,6 +26,7 @@ const deps: AppDeps = {
   fetchImpl: fetch,
   now: () => new Date(),
   startedAtMs: Date.now(),
+  suiClient: new SuiGrpcClient({ network: "testnet", baseUrl: config.sui.rpcUrl }),
 };
 
 const app = createApp(deps);

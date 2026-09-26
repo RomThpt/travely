@@ -8,6 +8,7 @@ import { googleAuthRoutes } from "./routes/googleAuth";
 import { legsRoute } from "./routes/legs";
 import { passkeyAssociationRoutes } from "./routes/passkeyAssociation";
 import { positionsRoute } from "./routes/positions";
+import { protectionRoutes } from "./routes/protection";
 import { searchRoute } from "./routes/search";
 import { stationsRoute } from "./routes/stations";
 import { weatherRoute } from "./routes/weather";
@@ -35,6 +36,7 @@ export function createApp(deps: AppDeps): Hono {
   app.route("/v1/auth/google", googleAuth.api);
   app.route("/v1/search", searchRoute(deps));
   app.route("/v1/positions", positionsRoute(deps));
+  app.route("/v1", protectionRoutes(deps));
   app.route("/v1/weather", weatherRoute(deps));
   app.route("/v1/airports", airportsRoute(deps));
   app.route("/v1/stations", stationsRoute());

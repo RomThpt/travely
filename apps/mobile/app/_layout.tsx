@@ -64,6 +64,7 @@ function AuthenticatedNavigation() {
           />
           <Stack.Screen name="add" options={{ presentation: 'modal', headerShown: false }} />
           <Stack.Screen name="market/[legId]" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="balance" options={{ animation: 'slide_from_right' }} />
         </Stack.Protected>
       </Stack>
     </>

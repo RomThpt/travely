@@ -17,6 +17,18 @@ describe("loadConfig", () => {
     expect(config.proxyKey).toBe("a".repeat(16));
   });
 
+  test("loads the native testnet USDC and optional Enoki sponsor settings", () => {
+    const config = loadConfig({
+      ...BASE_ENV,
+      PROXY_KEY: "0123456789abcdef",
+      ENOKI_PRIVATE_API_KEY: "private-enoki-key",
+      MAX_POSITION_USDC: "25.5",
+    });
+    expect(config.sui.usdcType).toContain("::usdc::USDC");
+    expect(config.sui.maxPositionBaseUnits).toBe(25_500_000n);
+    expect(config.sui.enokiPrivateApiKey).toBe("private-enoki-key");
+  });
+
   test("treats blank provider keys as absent", () => {
     const config = loadConfig({
       PROXY_KEY: "0123456789abcdef",

@@ -16,30 +16,35 @@ const {
   flightPreimage,
   flightDigest,
   isDelayThreshold,
-  mist,
-  sui,
+  microUsdc,
+  purchaseFee,
   quote,
   payout,
   parseMarket,
+  settlementFee,
+  totalCost,
+  usdc,
 } = await import('./suiMarket');
 
 const market = parseMarket('0xmarket', {
   status: 0,
   flight_hash: Array.from(await flightDigest(demoFlight)),
   delay_threshold_ms: '1800000',
-  scheduled_arrival_ms: '1790417400000',
-  closes_at_ms: '1790412600000',
-  resolution_deadline_ms: '1790503800000',
-  cash: '400000000',
-  seed_capital: '400000000',
+  scheduled_arrival_ms: '1792089600000',
+  closes_at_ms: '1792079400000',
+  resolution_deadline_ms: '1792176000000',
+  cash: '2000000',
+  fees: '0',
+  seed_capital: '2000000',
   yes_exposure: '0',
   no_exposure: '0',
+  purchase_fees: '0',
   outstanding_claims: '0',
 });
 
 test('flight identity commits to the exact scheduled timestamps', () => {
-  expect(flightPreimage(demoFlight)).toBe('DEMO|DM042|2026-09-26|HND|KIX|1790413200000|1790417400000');
-  expect(market.flightHash).toBe('9c3746e94049e6b6913fc3618e359fba08588bee8578599ae63b138929f576ec');
+  expect(flightPreimage(demoFlight)).toBe('DEMO|DM042|2026-10-15|CDG|LIS|1792080000000|1792089600000');
+  expect(market.flightHash).toBe('7e3a8176f0fb17d303968395047f98af74c9bc5e14e32563ef80ad8b1e380e0d');
   expect(market.delayThresholdMs).toBe(1_800_000n);
 });
 
@@ -50,25 +55,37 @@ test('only the five supported delay thresholds can identify a market', () => {
   expect(delayThresholdLabel(21_600_000)).toBe('6 h+');
 });
 
-test('SUI values retain nine decimal places without floating point', () => {
-  expect(mist('0.000000001')).toBe(1n);
-  expect(sui(mist('12.345678901'))).toBe('12.345678901');
-  expect(() => mist('0.0000000001')).toThrow();
+test('USDC values retain six decimal places without floating point', () => {
+  expect(microUsdc('0.000001')).toBe(1n);
+  expect(usdc(microUsdc('12.345678'))).toBe('12.345678');
+  expect(() => microUsdc('0.0000001')).toThrow();
 });
 
 test('the initial YES and NO quotes each cost half the promised payout', () => {
-  expect(quote(market, true, mist('0.1'))).toBe(mist('0.05'));
-  expect(quote(market, false, mist('0.1'))).toBe(mist('0.05'));
+  expect(quote(market, true, microUsdc('1'))).toBe(microUsdc('0.5'));
+  expect(quote(market, false, microUsdc('1'))).toBe(microUsdc('0.5'));
   expect(() => quote(market, true, 0n)).toThrow();
 });
 
-test('a prior YES purchase shifts the live quote to 0.0625 SUI', () => {
-  expect(quote({ ...market, yesExposure: mist('0.1') }, true, mist('0.1'))).toBe(mist('0.0625'));
+test('a prior delayed protection shifts the live quote', () => {
+  expect(quote({ ...market, yesExposure: microUsdc('0.5') }, true, microUsdc('1'))).toBe(microUsdc('0.625'));
 });
 
-test('resolved positions pay only the winning side; cancellation refunds the stake', () => {
-  const yes = { id: 'yes', delayed: true, quantity: mist('0.1'), premium: mist('0.05') };
-  expect(payout({ ...market, status: 1 }, yes)).toBe(mist('0.1'));
+test('purchase and settlement fees round up in base units', () => {
+  expect(purchaseFee(microUsdc('0.5'))).toBe(microUsdc('0.005'));
+  expect(totalCost(microUsdc('0.5'))).toBe(microUsdc('0.505'));
+  expect(settlementFee(microUsdc('1'))).toBe(microUsdc('0.005'));
+});
+
+test('resolved positions pay the winning side net of fees; cancellation refunds all', () => {
+  const yes = {
+    id: 'yes',
+    delayed: true,
+    quantity: microUsdc('1'),
+    premium: microUsdc('0.5'),
+    purchaseFee: microUsdc('0.005'),
+  };
+  expect(payout({ ...market, status: 1 }, yes)).toBe(microUsdc('0.995'));
   expect(payout({ ...market, status: 2 }, yes)).toBe(0n);
-  expect(payout({ ...market, status: 3 }, yes)).toBe(mist('0.05'));
+  expect(payout({ ...market, status: 3 }, yes)).toBe(microUsdc('0.505'));
 });
