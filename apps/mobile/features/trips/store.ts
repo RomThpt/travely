@@ -15,6 +15,7 @@ import { clampSheetIndex, DEFAULT_SHEET_INDEX } from './sheet';
 export interface TripsState {
   trips: Trip[];
   legs: Record<string, Leg>;
+  personalDetails: Record<string, LegPersonalDetails>;
   /** What the app has watched move on each leg, newest first. */
   legChanges: Record<string, LegChange[]>;
   /**
@@ -34,6 +35,7 @@ export interface TripsState {
   updateLeg: (key: string, patch: Partial<Leg>) => void;
   removeLeg: (key: string) => void;
   removeTrip: (tripId: string) => void;
+  setPersonalDetails: (key: string, patch: Partial<LegPersonalDetails>) => void;
   rememberSearch: (search: RecentSearch) => void;
   setDemoMode: (enabled: boolean) => void;
   setLanguage: (language: LanguagePreference) => void;
@@ -42,9 +44,15 @@ export interface TripsState {
   refreshDemo: () => void;
 }
 
+export interface LegPersonalDetails {
+  bookingCode?: string;
+  seat?: string;
+}
+
 interface PersistedState {
   trips: Trip[];
   legs: Record<string, StoredLeg>;
+  personalDetails?: Record<string, LegPersonalDetails>;
   legChanges: Record<string, LegChange[]>;
   /** Absent in state persisted before the number field became a search. */
   recentSearches?: RecentSearch[];
@@ -60,6 +68,7 @@ const STORE_VERSION = 3;
 const EMPTY_PERSISTED: PersistedState = {
   trips: [],
   legs: {},
+  personalDetails: {},
   legChanges: {},
   recentSearches: [],
   demoMode: true,
@@ -95,6 +104,7 @@ export const useTripsStore = create<TripsState>()(
     (set, get) => ({
       trips: [],
       legs: {},
+      personalDetails: {},
       legChanges: {},
       recentSearches: [],
       demoMode: true,
@@ -150,12 +160,14 @@ export const useTripsStore = create<TripsState>()(
         const state = get();
         const legs = { ...state.legs };
         delete legs[key];
+        const personalDetails = { ...state.personalDetails };
+        delete personalDetails[key];
         const legChanges = { ...state.legChanges };
         delete legChanges[key];
         const trips = state.trips
           .map((trip) => ({ ...trip, legIds: trip.legIds.filter((held) => held !== key) }))
           .filter((trip) => trip.legIds.length > 0);
-        set({ legs, legChanges, trips });
+        set({ legs, personalDetails, legChanges, trips });
       },
 
       removeTrip: (tripId) => {
@@ -163,16 +175,28 @@ export const useTripsStore = create<TripsState>()(
         const trip = state.trips.find((candidate) => candidate.id === tripId);
         if (!trip) return;
         const legs = { ...state.legs };
+        const personalDetails = { ...state.personalDetails };
         const legChanges = { ...state.legChanges };
         for (const key of trip.legIds) {
           delete legs[key];
+          delete personalDetails[key];
           delete legChanges[key];
         }
         set({
           legs,
+          personalDetails,
           legChanges,
           trips: state.trips.filter((candidate) => candidate.id !== tripId),
         });
+      },
+
+      setPersonalDetails: (key, patch) => {
+        const current = get().personalDetails[key] ?? {};
+        const next = { ...current, ...patch };
+        const personalDetails = { ...get().personalDetails };
+        if (next.bookingCode || next.seat) personalDetails[key] = next;
+        else delete personalDetails[key];
+        set({ personalDetails });
       },
 
       rememberSearch: (search) => {
@@ -203,6 +227,7 @@ export const useTripsStore = create<TripsState>()(
       partialize: (state): PersistedState => ({
         trips: state.trips,
         legs: serialiseLegs(state.legs),
+        personalDetails: state.personalDetails,
         legChanges: state.legChanges,
         recentSearches: state.recentSearches,
         demoMode: state.demoMode,
@@ -216,6 +241,7 @@ export const useTripsStore = create<TripsState>()(
           ...current,
           trips: saved.trips ?? current.trips,
           legs: deserialiseLegs(saved.legs ?? {}),
+          personalDetails: saved.personalDetails ?? current.personalDetails,
           legChanges: saved.legChanges ?? current.legChanges,
           recentSearches: saved.recentSearches ?? current.recentSearches,
           demoMode: saved.demoMode ?? current.demoMode,
