@@ -16,6 +16,7 @@ export function MarketCard({ leg }: { leg: Leg }) {
   if (leg.modeName !== 'flight') return null;
   const french = language === 'fr';
   const legId = legStoreKey(leg);
+  const open = Date.parse(leg.departure.scheduled) - Date.now() > 10 * 60_000;
 
   const chooseThreshold = (thresholdMs: DelayThresholdMs) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -28,30 +29,36 @@ export function MarketCard({ leg }: { leg: Leg }) {
   return (
     <DetailCard
       title={french ? 'Assurance retard' : 'Delay insurance'}
-      trailing={<Text style={styles.kicker}>SUI TESTNET</Text>}
+      trailing={<Text style={styles.kicker}>USDC · SUI TESTNET</Text>}
     >
       <Text style={styles.body}>
-        {french
-          ? 'À partir de quel retard souhaitez-vous assurer ce vol ?'
-          : 'From which delay would you like to insure this flight?'}
+        {open
+          ? (french
+              ? 'À partir de quel retard souhaitez-vous assurer ce vol ?'
+              : 'From which delay would you like to insure this flight?')
+          : (french
+              ? 'Souscription fermée. Elle reste disponible jusqu’à 10 minutes avant le départ.'
+              : 'Enrollment closed. It remains available until 10 minutes before departure.')}
       </Text>
-      <View style={styles.thresholds}>
-        {DELAY_THRESHOLDS.map((threshold) => (
-          <Pressable
-            key={threshold.milliseconds}
-            accessibilityRole="button"
-            accessibilityLabel={
-              french
-                ? `Assurer un retard de ${threshold.label} ou plus`
-                : `Insure a delay of ${threshold.label} or more`
-            }
-            onPress={() => chooseThreshold(threshold.milliseconds)}
-            style={({ pressed }) => [styles.threshold, pressed && styles.pressed]}
-          >
-            <Text style={styles.thresholdLabel}>{threshold.label}</Text>
-          </Pressable>
-        ))}
-      </View>
+      {open ? (
+        <View style={styles.thresholds}>
+          {DELAY_THRESHOLDS.map((threshold) => (
+            <Pressable
+              key={threshold.milliseconds}
+              accessibilityRole="button"
+              accessibilityLabel={
+                french
+                  ? `Assurer un retard de ${threshold.label} ou plus`
+                  : `Insure a delay of ${threshold.label} or more`
+              }
+              onPress={() => chooseThreshold(threshold.milliseconds)}
+              style={({ pressed }) => [styles.threshold, pressed && styles.pressed]}
+            >
+              <Text style={styles.thresholdLabel}>{threshold.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
     </DetailCard>
   );
 }
