@@ -1,0 +1,40 @@
+services:
+  proxy:
+    build:
+      context: ..
+      dockerfile: apps/proxy/Dockerfile
+    env_file:
+      - proxy.env
+    volumes:
+      - proxy-data:/app/apps/proxy/data
+    healthcheck:
+      test:
+        - CMD
+        - bun
+        - -e
+        - fetch('http://localhost:8787/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    env_file:
+      - .env
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - proxy
+    restart: unless-stopped
+
+volumes:
+  proxy-data:
+  caddy-data:
+  caddy-config:
