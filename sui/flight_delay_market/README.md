@@ -12,3 +12,9 @@ sui move build --path sui/flight_delay_market -e testnet
 ```
 
 The published testnet package ID and example market are in [the web companion README](../../apps/market/README.md). The published version is a prototype and should not be used with funds of real value without a security review and an independent resolution design.
+
+Current testnet deployment:
+
+- package: `0x364922c3a44683eed8c1e05b5bf1b79d4c3a88ac2ad748b295740e4fb4e04da2`;
+- publish transaction: `HcjCgC2kfNq8sL7goEWKfRBy88HZYg269H7JBMzeCkwF`;
+- upgrade capability: `0xca7fe9d91ac915e08a542d6bee9a511af5e005da4b34ff8e8fb18e637e5309be`.

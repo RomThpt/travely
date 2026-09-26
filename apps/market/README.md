@@ -15,6 +15,8 @@ Open `http://localhost:5173`. Configure `VITE_MARKET_PACKAGE_ID` with the curren
 
 Markets use native Circle USDC on Sui testnet, with six decimal places. Purchases add a 1% service fee to the quoted premium. A winning claim deducts 0.5% from the gross payout. Cancellation refunds both the premium and its purchase fee.
 
+The current testnet package is `0x364922c3a44683eed8c1e05b5bf1b79d4c3a88ac2ad748b295740e4fb4e04da2`, published in transaction `HcjCgC2kfNq8sL7goEWKfRBy88HZYg269H7JBMzeCkwF`.
+
 ## Deterministic demo markets
 
 The shared manifest defines two future fictional flights:
