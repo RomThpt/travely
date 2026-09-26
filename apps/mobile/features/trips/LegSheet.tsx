@@ -11,6 +11,7 @@ import { useI18n } from '../settings/useI18n';
 import type { Connection } from './connection';
 import type { LegChange } from './changeLog';
 import { ActionBar } from './detail/ActionBar';
+import { AircraftCard } from './detail/AircraftCard';
 import { ChangesCard } from './detail/ChangesCard';
 import { GoodToKnowCard } from './detail/GoodToKnowCard';
 import { LiveStrip } from './detail/LiveStrip';
@@ -87,6 +88,7 @@ export function LegSheet({ leg, now, changes, connection, onMore }: LegSheetProp
       <View style={styles.cards}>
         <GoodToKnowCard leg={leg} connection={connection} />
         <MarketCard leg={leg} />
+        <AircraftCard leg={leg} />
         <TimetableCard leg={leg} />
         <WeatherCard leg={leg} />
 
