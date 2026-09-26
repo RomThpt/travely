@@ -32,11 +32,13 @@ Travel history and passport stamps are stored locally. The passport is a visual 
 
 ## Sui testnet delay market
 
-Travely integrates a binary Sui testnet market into the mobile flight detail flow. A liquidity provider funds the maximum payout; travelers can buy YES or NO positions and claim after resolution. The mobile screen reads the market live, signs transactions with a device-local testnet wallet, and can create and fund a market for a flight. The browser companion remains available for desktop demos.
+Travely integrates delay insurance directly into the mobile flight detail flow. A traveller picks a threshold (30 minutes, 1 hour, 2 hours, 4 hours, or 6 hours), pays the quoted premium in native testnet USDC, and can receive a payout after resolution. The flight fingerprint and threshold select the market automatically; no market ID is entered in the mobile app.
+
+The traveller signs with the existing zkLogin account. The proxy uses a private Enoki key to sponsor Sui gas, so the traveller does not need SUI. Profile contains a USDC balance and top-up page that copies the zkLogin address and opens the official Circle faucet. The contract charges 1% of the premium at purchase and 0.5% of a winning gross payout.
 
 ```sh
 cp apps/market/.env.example apps/market/.env
 bun run dev:market
 ```
 
-The example points to a published contract and a seeded fictional DEMO flight. See [mobile setup](apps/mobile/README.md), [market setup](apps/market/README.md), and the [Move contract](sui/flight_delay_market/README.md) for object IDs, test commands, and the resolver trust model.
+The browser companion remains available for operator and resolver demos. The deterministic seed command creates ten markets: five thresholds for each of the two future DEMO flights. See [mobile setup](apps/mobile/README.md), [market setup](apps/market/README.md), and the [Move contract](sui/flight_delay_market/README.md).

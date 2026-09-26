@@ -11,28 +11,33 @@ cp apps/market/.env.example apps/market/.env
 bun run dev:market
 ```
 
-Open `http://localhost:5173`. The page loads a funded fictional flight market by default. To open it from Expo, set `EXPO_PUBLIC_MARKET_URL=http://localhost:5173` in `apps/mobile/.env` and restart Expo. A physical device needs the computer's LAN or public URL instead of `localhost`.
+Open `http://localhost:5173`. Configure `VITE_MARKET_PACKAGE_ID` with the current package and optionally set `VITE_MARKET_ID` to open one market. The browser UI is an operator companion: a Sui wallet pays its own gas and can create, fund and resolve markets. The mobile traveller flow is separate and uses zkLogin plus sponsored gas.
 
-Testnet deployment:
+Markets use native Circle USDC on Sui testnet, with six decimal places. Purchases add a 1% service fee to the quoted premium. A winning claim deducts 0.5% from the gross payout. Cancellation refunds both the premium and its purchase fee.
 
-| Item | ID |
-| --- | --- |
-| Package | `0x15b2b349eb5b7ef96ba76fe50db525134b99b86ff38986ad64ba71c879d9805a` |
-| Market | `0x97239901832c279a3f93b89c86d49fdc12609e794d48d1b44916d29038a5705a` |
-| LP share | `0x22ca1f20c0c4a3f6f4ee7b11d21e37deacf2242c87610d07d81cb0124c524125` |
-| ResolverCap | `0xbd54fc1c0b0ea4ce5b0e77b6be8c70d6c19a393f47793ffbe9d729c8299d5110` |
-| Publish transaction | `F5U3RH4cWWGyLHDjkjueViK7abHwt8dQ8N4p6WHbh1Yw` |
-| Seed transaction | `Ft4aC18SL5xzRd6j96E69xiGUgDiuczkBJXzhoPCKGEi` |
+## Deterministic demo markets
 
-The fictional DEMO DM042 is HND–KIX on 2026-09-26, scheduled 18:00–19:10 JST. Its market closes at 17:50 JST, began with a 0.4 testnet SUI reserve, and expires at 19:10 JST the next day. A 0.05 SUI testnet purchase of a 0.1 SUI YES position was confirmed in transaction `G9cmhr7KBY8Y3VvGb2iiQxRvoCeqeoFiHnb524r38eUD`; the market currently holds 0.45 SUI. The winning YES threshold is an arrival at or after 19:40 JST. There is no claim that this fictional flight actually operates.
+The shared manifest defines two future fictional flights:
 
-To create a market for another flight, connect a Sui testnet wallet with test SUI, enter the flight identity and scheduled ISO times with offset, and choose the initial reserve. The web app signs the creation and the seed deposit in one transaction. It scans the latest 50 creation events for a matching flight when opened from Travely; enter the market ID manually for older markets.
+- `DM042`, CDG–LIS, 15 October 2026;
+- `DM117`, LHR–JFK, 20 October 2026.
+
+Each flight has one market for 30 minutes, 1 hour, 2 hours, 4 hours and 6 hours, for ten `Market<USDC>` objects in total. The seeder contributes 2 test USDC per market and skips combinations already emitted by the package.
+
+Use a dedicated testnet operator address, fund it with at least 20 test USDC through the Circle faucet and enough SUI for gas, then set its testnet-only private key locally:
+
+```sh
+SUI_PACKAGE_ID=0x... SUI_OPERATOR_PRIVATE_KEY=suiprivkey... \
+  bun run --cwd apps/market seed:demo
+```
+
+Never commit the operator key or reuse a key that controls real assets. The returned `ResolverCap`, `FeeCap` and LP shares remain owned by that operator address.
 
 The flight fingerprint is SHA-256 of `OPERATOR|NUMBER|YYYY-MM-DD|ORIGIN|DESTINATION|DEPARTURE_MS|ARRIVAL_MS`, with identity fields trimmed and uppercased. The app compares it with the onchain fingerprint before allowing an action on a linked flight.
 
 ## Resolution and limits
 
-The wallet holding `ResolverCap` enters the **actual final arrival** after the scheduled arrival. The contract decides whether the 30-minute threshold was met. This is a trusted reporter for the prototype, not an independent oracle. The reporter should verify the provider's final timestamp and route before submitting. If no report arrives by the deadline, anyone can cancel; positions refund their premiums. LP withdrawal keeps cash for outstanding winning claims or refunds.
+The wallet holding `ResolverCap` enters the **actual final arrival** after the scheduled arrival. The contract decides whether that market's immutable threshold was met. This is a trusted reporter for the prototype, not an independent oracle. The reporter should verify the provider's final timestamp and route before submitting. If no report arrives by the deadline, anyone can cancel; positions refund their premiums and purchase fees. LP withdrawal keeps cash for outstanding winning claims or refunds.
 
 For a real AeroDataBox flight, `scripts/resolve.ts` checks the proxy's final runway time against the market's immutable flight fingerprint and schedule. It rejects stale/degraded route fallbacks, non-final status, missing final times, and mismatched market data. It prints the result first and submits only when `--execute` is passed. It uses the Sui CLI keystore for signing; no private key belongs in the web app or script environment.
 
@@ -42,7 +47,7 @@ TRAVELY_PROXY_URL=http://localhost:8787 TRAVELY_PROXY_KEY=... SUI_CLIENT_CONFIG=
 # After reviewing the output, repeat the command with --execute.
 ```
 
-The seed market is fictional, so it cannot be resolved through AeroDataBox. Its ResolverCap holder can demonstrate the resolution path using the web form once the scheduled arrival has passed. The meaning of “arrival” for a real AeroDataBox flight is its final runway timestamp.
+The demo flights are fictional, so they cannot be resolved through AeroDataBox. Their `ResolverCap` holder can demonstrate the resolution path using the web form once the scheduled arrival has passed. The meaning of “arrival” for a real AeroDataBox flight is its final runway timestamp.
 
 Market prices respond to outstanding YES and NO payout exposure. They are simple testnet prototype prices, not a calibrated probability or a guaranteed return. There is no production claim, real-money liquidity, or automated flight-data attestation.
 

@@ -2,11 +2,11 @@
 
 Statut : spécification produit et technique
 
-Date : 23 septembre 2026
+Date : 27 septembre 2026
 
 ## 1. Résumé
 
-Travely permet à un voyageur d'acheter une protection contre le retard de son vol depuis l'application mobile. La protection est représentée par une position sur un marché binaire Sui : le vol arrive avec au moins 30 minutes de retard, ou il arrive avec moins de 30 minutes de retard.
+Travely permet à un voyageur d'acheter une protection contre le retard de son vol depuis l'application mobile. La protection est représentée par une position sur un marché binaire Sui. Le voyageur choisit un seuil de 30 minutes, 1 heure, 2 heures, 4 heures ou 6 heures et plus.
 
 L'utilisateur se connecte avec Google ou Apple, paie sa position en USDC et ne manipule ni seed phrase, ni clé privée, ni SUI. Travely sponsorise les frais réseau et limite strictement ce sponsoring aux opérations autorisées du contrat.
 
@@ -18,7 +18,7 @@ Le MVP se concentre sur une protection par vol. Les vaults par compagnie, route 
 - Les mises, la liquidité et les versements utilisent l'USDC natif sur Sui.
 - L'utilisateur n'a pas besoin de posséder du SUI.
 - Travely paie le gas réseau en SUI via un compte sponsor backend.
-- Un éventuel frais de service Travely peut être payé en USDC dans la même transaction que l'achat.
+- Travely prélève 1 % de la prime à l'achat et 0,5 % du versement brut gagnant au règlement.
 - L'achat est exécuté dans un seul Programmable Transaction Block.
 - Le backend ne sponsorise que les fonctions et les objets explicitement autorisés.
 - Le règlement du vol reste assuré par un service séparé disposant du `ResolverCap`.
@@ -26,7 +26,7 @@ Le MVP se concentre sur une protection par vol. Les vaults par compagnie, route 
 
 ### Présentation des frais
 
-Le protocole Sui facture toujours le gas en SUI pour l'appel arbitraire à `market::buy`. Travely règle ce SUI en arrière-plan. Si une participation en USDC est ajoutée pour couvrir ce coût, l'interface l'affiche comme « frais Travely » et non comme « gas en USDC ».
+Le protocole Sui facture toujours le gas en SUI pour les appels `market::buy` et `market::claim`. Travely règle ce SUI en arrière-plan avec Enoki. Les frais Travely sont des frais de service en USDC ; ils ne sont jamais présentés comme du « gas en USDC ».
 
 ## 3. Objectifs
 
@@ -70,13 +70,11 @@ Le protocole Sui facture toujours le gas en SUI pour l'appel arbitraire à `mark
 
 L'adresse Sui reste consultable dans les paramètres pour la transparence et le support.
 
-### 5.2 Approvisionnement en USDC
+### 5.2 Solde et approvisionnement en USDC
 
-Pour le testnet, l'application propose un parcours de financement contrôlé :
+Le Profil contient une page « Solde et recharge USDC ». Elle affiche le solde de l'adresse zkLogin, permet de copier cette adresse, ouvre le faucet officiel Circle et explique comment sélectionner USDC puis Sui Testnet. Le faucet fournit 20 USDC de test par demande, dans la limite publiée par Circle. Un bouton actualise le solde au retour dans l'application.
 
-- faucet officiel lorsque l'USDC de test est disponible ;
-- lien vers un outil de financement documenté ;
-- `MockUSDC` clairement identifié pour une démonstration locale si aucun faucet officiel n'est exploitable.
+Le testnet utilise exclusivement l'USDC natif Circle. Aucun `MockUSDC` et aucun type de coin saisi par l'utilisateur ne sont acceptés.
 
 Le type de coin est fourni par la configuration backend. Il ne doit jamais être saisi ou choisi par l'utilisateur.
 
@@ -88,7 +86,7 @@ Le type de coin est fourni par la configuration backend. Il ne doit jamais être
 4. L'application affiche :
    - le prix estimé ;
    - le versement potentiel ;
-   - les frais Travely éventuels ;
+   - les frais Travely de 1 % sur la prime ;
    - le montant total débité ;
    - l'heure de fermeture du marché ;
    - la source utilisée pour résoudre le retard.
@@ -101,7 +99,7 @@ Le PTB réalise atomiquement :
 
 1. la sélection du solde USDC de l'utilisateur ;
 2. l'appel `market::buy<USDC>` ;
-3. le paiement optionnel des frais Travely en USDC ;
+3. l'isolation des frais Travely en USDC dans le contrat ;
 4. la création de la position détenue par l'utilisateur.
 
 Si une étape échoue, aucun débit partiel ne doit subsister.
@@ -113,7 +111,7 @@ Si une étape échoue, aucun débit partiel ne doit subsister.
 3. L'application détecte le résultat et indique si la position est gagnante.
 4. L'utilisateur choisit « Recevoir mon versement ».
 5. Travely prépare et sponsorise `claim<USDC>`.
-6. Le contrat verse l'USDC à l'adresse de l'utilisateur et détruit la position consommée.
+6. Le contrat prélève 0,5 % du versement brut gagnant, verse le solde net en USDC à l'adresse de l'utilisateur et détruit la position consommée.
 
 Le bouton de versement n'est présenté que si la position est réclamable.
 
@@ -208,7 +206,11 @@ Le type USDC natif mainnet publié par Circle est :
 0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC
 ```
 
-Le type testnet doit être récupéré depuis la configuration officielle Circle au moment du déploiement. Si un mock est nécessaire pour la démonstration, son nom, son symbole et l'interface doivent indiquer explicitement qu'il ne s'agit pas d'USDC réel.
+Le type testnet natif Circle est :
+
+```text
+0xa1ec7fc00a6f40db9693ad1415d0c193ad3906494428cf252621037bd7117e29::usdc::USDC
+```
 
 ### Migration du prototype
 
@@ -230,10 +232,9 @@ Le type testnet doit être récupéré depuis la configuration officielle Circle
 5. Le mobile vérifie que le résumé correspond à l'écran de confirmation.
 6. L'utilisateur signe les octets.
 7. Le mobile envoie les mêmes octets, la signature et une clé d'idempotence au backend.
-8. Le backend décode à nouveau les octets et applique toute la politique de sponsoring.
-9. Il simule la transaction.
-10. Il ajoute la signature du sponsor et exécute la transaction.
-11. Il renvoie le digest et les effets au mobile.
+8. Le backend retrouve le digest préparé, vérifie l'adresse zkLogin et la clé d'idempotence.
+9. Enoki vérifie les cibles Move autorisées, ajoute le gas sponsor et exécute la transaction signée.
+10. Le backend renvoie le digest soumis au mobile.
 
 Le backend ne reconstruit pas ou ne modifie pas une transaction après la signature utilisateur.
 
@@ -241,9 +242,9 @@ Le backend ne reconstruit pas ou ne modifie pas une transaction après la signat
 
 Le sponsor utilise d'abord le sponsoring par solde d'adresse lorsque cette capacité est disponible sur le réseau cible. Une solution basée sur des gas coins détenus par le sponsor sert de repli. Dans les deux cas, le compte utilisateur peut avoir un solde SUI nul.
 
-### Frais Travely optionnels
+### Frais Travely
 
-Un transfert USDC vers la trésorerie Travely peut être ajouté au PTB. La politique vérifie alors :
+Le contrat calcule lui-même les frais afin qu'un client ou un sponsor compromis ne puisse pas les contourner. La politique vérifie :
 
 - le type USDC exact ;
 - le bénéficiaire exact ;
@@ -251,7 +252,7 @@ Un transfert USDC vers la trésorerie Travely peut être ajouté au PTB. La poli
 - l'existence de l'achat correspondant ;
 - l'absence de tout autre transfert sortant.
 
-Cette étape doit rester désactivable par configuration pour le MVP testnet.
+Les frais d'achat restent séparés du collatéral. Les frais de règlement ne sont réalisés que lors d'un versement gagnant. Une annulation rembourse la prime et ses frais d'achat. Les frais ne peuvent être retirés qu'après la résolution et le traitement de toutes les réclamations.
 
 ## 10. Politique du sponsor
 
@@ -301,9 +302,11 @@ Retourne les données publiques nécessaires au mobile :
   "network": "testnet",
   "packageId": "0x...",
   "usdcType": "0x...::usdc::USDC",
-  "sponsorAddress": "0x...",
   "maxPositionBaseUnits": "100000000",
-  "feeBaseUnits": "0"
+  "purchaseFeeBps": "100",
+  "settlementFeeBps": "50",
+  "sponsoredTransactions": true,
+  "faucetUrl": "https://faucet.circle.com/"
 }
 ```
 
@@ -324,13 +327,16 @@ Sortie :
 
 ```json
 {
+  "digest": "transaction-digest",
   "transactionBytes": "base64",
   "expiresAt": "2026-09-23T10:02:00Z",
   "summary": {
     "debitUsdcBaseUnits": "2500000",
-    "feeUsdcBaseUnits": "0",
-    "potentialPayoutUsdcBaseUnits": "10000000",
-    "condition": "ARRIVAL_DELAY_GTE_30_MIN"
+    "premiumUsdcBaseUnits": "2475000",
+    "feeUsdcBaseUnits": "25000",
+    "potentialPayoutUsdcBaseUnits": "9950000",
+    "settlementFeeUsdcBaseUnits": "50000",
+    "condition": "ARRIVAL_DELAY_GTE_1800000_MS"
   }
 }
 ```
@@ -346,6 +352,12 @@ Sortie : digest, statut, effets utiles et position créée.
 Ces routes utilisent une session utilisateur vérifiée. La clé publique intégrée au proxy mobile ne suffit pas pour autoriser un sponsoring. Les routes de résolution et d'administration utilisent une authentification distincte.
 
 ## 12. Évolutions onchain
+
+### Démonstration déterministe
+
+Les horaires des vols assurables de démonstration sont définis dans un manifeste partagé par l'application et le script d'amorçage. Ils ne sont plus recalculés avec `Date.now()`, car l'empreinte du vol inclut les heures exactes de départ et d'arrivée. Toute modification du manifeste impose de créer une nouvelle série de marchés.
+
+Le lot initial contient les deux vols futurs `DM042` et `DM117`, chacun décliné sur les cinq seuils, soit dix objets `Market<USDC>`. Chaque objet reçoit 2 USDC de réserve initiale. Les scénarios déjà partis ou arrivés restent visibles dans la démo Flighty ; leur carte d'assurance reste affichée en lecture seule et explique que la souscription est fermée.
 
 ### Réutilisation du package existant
 
@@ -398,9 +410,9 @@ L'écran affiche :
 - source et règles de résolution ;
 - bouton de confirmation.
 
-### Feuille de confirmation
+### Résumé de confirmation
 
-Avant signature, elle reprend les informations de `summary` renvoyées par le backend. Toute différence avec le devis affiché bloque la signature et déclenche un nouveau devis.
+Le même écran de protection reprend les informations de `summary` renvoyées par le backend. Une seule action explicite confirme l'achat et déclenche la signature. Toute différence avec le devis affiché bloque la signature et déclenche un nouveau devis, sans ajouter une feuille intermédiaire au parcours.
 
 ### Position active
 
@@ -411,6 +423,10 @@ Après l'achat, Travely affiche :
 - le versement potentiel ;
 - le statut en attente, gagnant, perdant, remboursable ou réclamé ;
 - le digest consultable dans l'explorateur Sui.
+
+### Profil et recharge
+
+Le Profil affiche un accès permanent au solde USDC. La page de recharge ne manipule aucune clé privée : elle copie uniquement l'adresse zkLogin et ouvre le faucet Circle dans un navigateur sécurisé. Le retour dans l'application déclenche une nouvelle lecture onchain. Le texte rappelle que Travely sponsorise le gas et qu'aucun SUI n'est requis sur le compte utilisateur.
 
 ## 14. Sécurité et exploitation
 
@@ -426,6 +442,8 @@ Après l'achat, Travely affiche :
 - Comparaison entre les effets simulés et la politique attendue.
 - Protection contre le rejeu par idempotence et expiration de transaction.
 - Arrêt d'urgence du sponsor indépendant du contrat onchain.
+
+La mémoire d'idempotence du proxy de démonstration est locale au processus. Un déploiement multi-instance doit la remplacer par un stockage partagé avec une opération atomique avant d'accepter du trafic réel.
 
 ## 15. Observabilité
 
@@ -450,7 +468,7 @@ Les événements suivants sont mesurés sans stocker de secrets :
 
 - Vérifier le type USDC testnet auprès de Circle.
 - Créer et amorcer un `Market<USDC>`.
-- Ajouter une configuration réseau centralisée.
+- Ajouter une configuration réseau centralisée et le type USDC testnet Circle.
 - Remplacer les conversions SUI du client par les conversions USDC.
 
 ### Phase 2 — Compte zkLogin
@@ -462,7 +480,7 @@ Les événements suivants sont mesurés sans stocker de secrets :
 
 ### Phase 3 — Sponsor backend
 
-- Ajouter les routes `config`, `prepare` et `execute`.
+- Ajouter les routes `config`, `prepare`, `claim/prepare` et `execute`.
 - Isoler la clé du sponsor.
 - Implémenter l'analyse du PTB et les règles d'allowlist.
 - Ajouter simulation, idempotence, plafonds et journalisation sûre.
@@ -470,14 +488,14 @@ Les événements suivants sont mesurés sans stocker de secrets :
 ### Phase 4 — Parcours mobile
 
 - Refaire l'écran marché autour de la protection et de l'USDC.
-- Ajouter la feuille de confirmation.
+- Intégrer le résumé de confirmation au même écran.
 - Ajouter les états de transaction et les parcours d'échec.
 - Afficher les positions actives dans le voyage.
 
 ### Phase 5 — Résolution et versement
 
 - Relier le service de données de vol au `ResolverCap`.
-- Ajouter le versement en un clic sponsorisé.
+- Ajouter le versement en un clic sponsorisé et la page Profil de recharge Circle.
 - Tester le retard, l'absence de retard, l'annulation et l'indisponibilité des données.
 
 ### Phase 6 — Durcissement et démonstration
@@ -504,7 +522,7 @@ Le MVP est accepté lorsque :
 11. Un montant au-dessus du plafond est refusé.
 12. Une transaction expirée ou rejouée est refusée.
 13. Une position gagnante peut être réclamée en USDC avec une transaction sponsorisée.
-14. Une position perdante ne peut pas être réclamée.
+14. Une position perdante n'affiche aucun versement et ne peut produire aucun transfert USDC.
 15. Aucun secret durable n'est présent dans le bundle mobile ou dans les logs.
 
 ## 18. Plan de test
@@ -515,7 +533,7 @@ Le MVP est accepté lorsque :
 - calcul du prix et du versement avec 6 décimales ;
 - achat après fermeture refusé ;
 - résolution autorisée uniquement avec le bon `ResolverCap` ;
-- réclamation gagnante et refus d'une position perdante ;
+- réclamation gagnante, frais de règlement et versement nul d'une position perdante ;
 - remboursement après annulation ;
 - invariants des réserves et de la liquidité.
 
@@ -549,10 +567,10 @@ Les valeurs recommandées pour le MVP sont indiquées ci-dessous :
 
 | Sujet | Choix recommandé |
 | --- | --- |
-| Fournisseur zkLogin | Intégration directe Sui, avec abstraction permettant Enoki ensuite |
+| Fournisseur zkLogin | Enoki zkLogin avec sponsoring backend |
 | Identités | Apple et Google |
-| Stablecoin testnet | USDC officiel si accessible, sinon `MockUSDC` explicitement étiqueté |
-| Frais Travely | Désactivés pendant le MVP testnet |
+| Stablecoin testnet | USDC natif Circle sur Sui testnet |
+| Frais Travely | 1 % de la prime + 0,5 % du versement brut gagnant |
 | Versement | Un clic avec transaction sponsorisée |
 | Liquidité | Compte opérateur séparé, hors application voyageur |
 | Résolution | Service backend séparé avec `ResolverCap` |

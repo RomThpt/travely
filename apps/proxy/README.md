@@ -17,6 +17,10 @@ For the optional local passkey lock, set `PASSKEY_RP_ID` to the public HTTPS hos
 
 All `/v1/*` routes require `x-travely-key`. The mobile app bundles this value, so IP and key rate limits also protect the proxy. `/health` and the Google OAuth callback are public. The bundled proxy key is not user authentication.
 
+Sponsored insurance requires `ENOKI_PRIVATE_API_KEY`, `SUI_PACKAGE_ID`, `SUI_USDC_TYPE`, and `SUI_RPC_URL`. Keep the Enoki private key only in the proxy environment. Purchase and claim preparation also require the user's `zklogin-jwt`; the proxy derives the address through Enoki, constructs the exact transaction kind and limits the sponsored Move target to `market::buy` or `market::claim`.
+
+The demo keeps prepared digests and idempotency keys in process memory. Use a shared atomic store before running multiple proxy instances or accepting production traffic.
+
 ## Routes
 
 - `GET /health`: status and provider quota.
@@ -29,5 +33,9 @@ All `/v1/*` routes require `x-travely-key`. The mobile app bundles this value, s
 - `GET /v1/positions/flight/:callsign` and `/v1/positions/vessel/:mmsi`: live positions.
 - `GET /v1/weather?lat&lon&at=` and `/v1/weather/airport/:iata?at=`: weather and delay risk.
 - `GET /v1/airports/:iata`, `/v1/airports/index`, and `/v1/stations/:uic`: places.
+- `GET /v1/sui/config`: public testnet coin, package, fee and sponsor status.
+- `POST /v1/protection/prepare`: canonical sponsored USDC purchase transaction.
+- `POST /v1/protection/claim/prepare`: canonical sponsored payout transaction.
+- `POST /v1/protection/execute`: execute a previously prepared digest with its zkLogin signature.
 
 The proxy serves cached data when a provider reaches its quota. See [deployment](../../deploy/README.md) for HTTPS setup.
