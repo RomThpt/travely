@@ -37,7 +37,10 @@ export default function MarketScreen() {
   const { language } = useI18n();
   const fr = language === 'fr';
   const locale = fr ? 'fr-FR' : 'en-US';
-  const { legId: encodedLegId } = useLocalSearchParams<{ legId: string }>();
+  const { legId: encodedLegId, side: requestedSide } = useLocalSearchParams<{
+    legId: string;
+    side?: string;
+  }>();
   const legId = decodeURIComponent(encodedLegId ?? '');
   const isDemo = legId === 'demo';
   const { data: leg } = useLeg(legId);
@@ -51,15 +54,14 @@ export default function MarketScreen() {
   const [walletReady, setWalletReady] = useState(false);
   const [balance, setBalance] = useState<bigint | null>(null);
   const [marketId, setMarketId] = useState(isDemo ? DEMO_MARKET_ID : '');
-  const [marketInput, setMarketInput] = useState(isDemo ? DEMO_MARKET_ID : '');
   const [market, setMarket] = useState<MarketState | null>(null);
   const [positions, setPositions] = useState<Position[]>([]);
   const [shares, setShares] = useState<Share[]>([]);
   const [resolverCap, setResolverCap] = useState<string | null>(null);
   const [matched, setMatched] = useState(false);
-  const [lookupBusy, setLookupBusy] = useState(false);
+  const [lookupBusy, setLookupBusy] = useState(!isDemo);
   const [busy, setBusy] = useState(false);
-  const [side, setSide] = useState(true);
+  const [side, setSide] = useState(requestedSide !== 'no');
   const [quantity, setQuantity] = useState('0.1');
   const [seed, setSeed] = useState('0.5');
   const [lpAmount, setLpAmount] = useState('0.1');
@@ -82,8 +84,8 @@ export default function MarketScreen() {
   useEffect(() => {
     if (!flight || isDemo || marketId) return;
     let active = true;
-    void Promise.resolve().then(() => { if (active) setLookupBusy(true); return findMarket(flight); }).then((found) => {
-      if (active && found) { setMarketId(found); setMarketInput(found); }
+    void findMarket(flight).then((found) => {
+      if (active && found) setMarketId(found);
     }).catch((cause: unknown) => { if (active) setError(String(cause)); })
       .finally(() => { if (active) setLookupBusy(false); });
     return () => { active = false; };
@@ -152,7 +154,7 @@ export default function MarketScreen() {
         const event = confirmed.Transaction?.events?.find((item) => item.eventType === `${PACKAGE_ID}::market::MarketCreated`);
         const id = (event?.json as { market_id?: string } | undefined)?.market_id;
         if (!id) throw new Error(`Marché créé. Transaction : ${result.Transaction.digest}`);
-        setMarketId(id); setMarketInput(id);
+        setMarketId(id);
         setNotice(fr ? 'Marché créé et liquidité déposée.' : 'Market created and funded.');
       } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
       finally { setBusy(false); }
@@ -214,82 +216,209 @@ export default function MarketScreen() {
         {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
         {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
-        <Card style={styles.section}>
-          <Text style={styles.sectionTitle}>{fr ? 'Marché du vol' : 'Flight market'}</Text>
-          {lookupBusy ? <ActivityIndicator color={colors.route} /> : null}
-          <Field label={fr ? 'Identifiant du marché' : 'Market ID'} value={marketInput} onChangeText={setMarketInput} placeholder="0x…" />
-          <Button label={fr ? 'Charger ce marché' : 'Load market'} variant="secondary" disabled={busy || !/^0x[a-fA-F0-9]{64}$/.test(marketInput)} onPress={() => { setMarket(null); setMatched(false); if (marketInput.trim() === marketId) void refresh().catch((cause: unknown) => setError(String(cause))); else setMarketId(marketInput.trim()); }} />
-          {market ? <>
-            <Text style={styles.status}>{(fr ? statusName : ['Open', 'Delay confirmed', 'On time', 'Cancelled'])[market.status] ?? '—'}</Text>
+        {lookupBusy ? (
+          <Card style={styles.section}>
+            <ActivityIndicator color={colors.route} />
+            <Text style={styles.muted}>
+              {fr ? 'Recherche automatique du marché de ce vol…' : 'Finding this flight’s market…'}
+            </Text>
+          </Card>
+        ) : market ? (
+          <Card style={styles.section}>
+            <Text style={styles.sectionTitle}>{fr ? 'Prendre position' : 'Take a position'}</Text>
+            <View style={styles.sides}>
+              <Pressable
+                accessibilityRole="button"
+                style={[styles.side, side && styles.selectedSide]}
+                onPress={() => setSide(true)}
+              >
+                <Text style={styles.sideText}>OUI / YES</Text>
+                <Text style={styles.sideHint}>+30 MIN</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                style={[styles.side, !side && styles.selectedSide]}
+                onPress={() => setSide(false)}
+              >
+                <Text style={styles.sideText}>NON / NO</Text>
+                <Text style={styles.sideHint}>&lt;30 MIN</Text>
+              </Pressable>
+            </View>
+            <Field
+              label={fr ? 'Versement si gagnant (SUI)' : 'Payout if winning (SUI)'}
+              value={quantity}
+              onChangeText={setQuantity}
+              placeholder="0.1"
+            />
+            <Stat
+              label={fr ? 'Prix maintenant' : 'Price now'}
+              value={premium === null ? '—' : `${sui(premium)} SUI`}
+            />
+            {!walletReady ? <ActivityIndicator color={colors.route} /> : null}
+            {walletReady ? (
+              !wallet ? (
+                <Button
+                  label={fr ? 'Créer le portefeuille testnet' : 'Create testnet wallet'}
+                  loading={busy}
+                  onPress={() => acquireWallet(false)}
+                />
+              ) : (
+                <Button
+                  label={side ? (fr ? 'Parier OUI' : 'Bet YES') : fr ? 'Parier NON' : 'Bet NO'}
+                  loading={busy}
+                  disabled={!canTrade}
+                  onPress={() => void run(() => buyTx(market, side, mist(quantity)))}
+                />
+              )
+            ) : null}
+            {wallet && balance !== null ? (
+              <Text style={styles.balanceInline}>
+                {fr ? 'Solde' : 'Balance'} · {sui(balance)} SUI
+              </Text>
+            ) : null}
+          </Card>
+        ) : (
+          <Card style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              {fr ? 'Ouvrir le marché de ce vol' : 'Open this flight market'}
+            </Text>
+            <Text style={styles.muted}>
+              {fr
+                ? 'Aucun marché n’existe encore. Son identifiant sera créé et associé automatiquement à ce vol.'
+                : 'No market exists yet. Its ID will be created and linked to this flight automatically.'}
+            </Text>
+            {!walletReady ? <ActivityIndicator color={colors.route} /> : null}
+            {walletReady ? (
+              !wallet ? (
+                <Button
+                  label={fr ? 'Créer le portefeuille testnet' : 'Create testnet wallet'}
+                  loading={busy}
+                  onPress={() => acquireWallet(false)}
+                />
+              ) : (
+                <>
+                  <Field
+                    label={fr ? 'Liquidité initiale (SUI)' : 'Initial liquidity (SUI)'}
+                    value={seed}
+                    onChangeText={setSeed}
+                    placeholder="0.5"
+                  />
+                  <Button
+                    label={fr ? 'Créer automatiquement' : 'Create automatically'}
+                    loading={busy}
+                    disabled={!canCreate || busy}
+                    onPress={create}
+                  />
+                </>
+              )
+            ) : null}
+          </Card>
+        )}
+
+        {market ? (
+          <Card style={styles.section}>
+            <Text style={styles.sectionTitle}>{fr ? 'Mes positions' : 'My positions'}</Text>
+            {positions.length === 0 ? (
+              <Text style={styles.muted}>
+                {fr ? 'Aucune position pour ce portefeuille.' : 'No positions for this wallet.'}
+              </Text>
+            ) : (
+              positions.map((position) => (
+                <View key={position.id} style={styles.owned}>
+                  <Text style={styles.ownedTitle}>
+                    {position.delayed ? 'OUI / YES' : 'NON / NO'} · {sui(position.quantity)} SUI
+                  </Text>
+                  <Text style={styles.muted}>
+                    {fr ? 'Mise' : 'Stake'} {sui(position.premium)} SUI · {short(position.id)}
+                  </Text>
+                  {market.status !== 0 ? (
+                    <Text style={styles.verified}>
+                      {fr ? 'À recevoir' : 'Payout'} : {sui(payout(market, position))} SUI
+                    </Text>
+                  ) : null}
+                  <Button
+                    label={fr ? 'Réclamer' : 'Claim'}
+                    variant="secondary"
+                    disabled={busy || !matched || market.status === 0}
+                    onPress={() => void run(() => claimTx(market.id, position.id))}
+                  />
+                </View>
+              ))
+            )}
+          </Card>
+        ) : null}
+
+        {market ? (
+          <Card style={styles.section}>
+            <Text style={styles.sectionTitle}>{fr ? 'Marché du vol' : 'Flight market'}</Text>
+            <Text style={styles.status}>
+              {(fr ? statusName : ['Open', 'Delay confirmed', 'On time', 'Cancelled'])[
+                market.status
+              ] ?? '—'}
+            </Text>
             <Stat label={fr ? 'Clôture' : 'Closes'} value={dateTime(market.closesAtMs, locale)} />
-            <Stat label={fr ? 'Arrivée prévue' : 'Scheduled arrival'} value={dateTime(market.scheduledArrivalMs, locale)} />
-            <Stat label={fr ? 'Réserve disponible' : 'Available reserve'} value={`${sui(market.cash)} SUI`} />
-            <Stat label={fr ? 'Versements encore dus' : 'Outstanding payouts'} value={`${sui(market.outstandingClaims)} SUI`} />
-            <Text style={matched ? styles.verified : styles.error}>{matched ? (fr ? 'Empreinte du vol vérifiée.' : 'Flight fingerprint verified.') : (fr ? 'Ce marché ne correspond pas au vol affiché. Aucune action autorisée.' : 'This market does not match this flight. Actions are disabled.')}</Text>
-          </> : <Text style={styles.muted}>{fr ? 'Aucun marché chargé pour ce vol. Tu peux en créer un avec des SUI de test.' : 'No market loaded for this flight. You can create one with test SUI.'}</Text>}
-          <Button label={fr ? 'Actualiser' : 'Refresh'} variant="ghost" disabled={!marketId || busy} onPress={() => void refresh().catch((cause: unknown) => setError(String(cause)))} />
-          {!isDemo ? <Button label={fr ? 'Voir le marché de démonstration' : 'Open demo market'} variant="ghost" onPress={() => router.push('/market/demo')} /> : null}
-        </Card>
+            <Stat
+              label={fr ? 'Réserve disponible' : 'Available reserve'}
+              value={`${sui(market.cash)} SUI`}
+            />
+            <Text style={matched ? styles.verified : styles.error}>
+              {matched
+                ? fr
+                  ? 'Marché trouvé automatiquement et vol vérifié.'
+                  : 'Market found automatically and flight verified.'
+                : fr
+                  ? 'Le marché trouvé ne correspond pas à ce vol.'
+                  : 'The discovered market does not match this flight.'}
+            </Text>
+            <Button
+              label={fr ? 'Actualiser' : 'Refresh'}
+              variant="ghost"
+              disabled={busy}
+              onPress={() => void refresh().catch((cause: unknown) => setError(String(cause)))}
+            />
+            {market.status === 0 && market.resolutionDeadlineMs < BigInt(now) ? (
+              <Button
+                label={fr ? 'Annuler sans résultat' : 'Cancel unresolved market'}
+                variant="secondary"
+                disabled={!wallet || !matched || busy}
+                onPress={() => void run(() => cancelTx(market.id))}
+              />
+            ) : null}
+          </Card>
+        ) : null}
 
         <Card style={styles.section}>
           <Text style={styles.sectionTitle}>{fr ? 'Portefeuille testnet' : 'Testnet wallet'}</Text>
-          {!walletReady ? <ActivityIndicator color={colors.route} /> : wallet ? <>
-            <Text style={styles.address} selectable>{wallet.toSuiAddress()}</Text>
-            <Stat label={fr ? 'Solde' : 'Balance'} value={balance === null ? '—' : `${sui(balance)} SUI`} />
-            <Button label={fr ? 'Actualiser le solde' : 'Refresh balance'} variant="ghost" disabled={busy} onPress={() => void refreshBalance().catch((cause: unknown) => setError(String(cause)))} />
-            <Button label={fr ? 'Demander des SUI de test' : 'Request test SUI'} variant="secondary" disabled={busy} onPress={requestFunds} />
-            <Button label={fr ? 'Sauvegarder la clé' : 'Back up key'} variant="ghost" onPress={backup} />
-            <Text style={styles.muted}>{fr ? 'Ce portefeuille est enregistré sur cet appareil. Sauvegarde la clé avant d’acheter : sa perte rend les positions irrécupérables.' : 'This wallet is stored on this device. Back up its key before buying: losing it makes positions unrecoverable.'}</Text>
-          </> : <>
-            <Text style={styles.muted}>{fr ? 'Crée un portefeuille local pour signer les transactions de test. Importe uniquement une clé réservée au testnet, jamais une clé qui contrôle des fonds réels.' : 'Create a local wallet to sign test transactions. Import only a testnet-only key, never one that controls real funds.'}</Text>
-            <Button label={fr ? 'Créer un portefeuille' : 'Create wallet'} disabled={busy} onPress={() => acquireWallet(false)} />
-            <Field label={fr ? 'Clé privée Sui' : 'Sui private key'} value={importSecret} onChangeText={setImportSecret} placeholder="suiprivkey1…" secure />
-            <Button label={fr ? 'Importer la clé' : 'Import key'} variant="secondary" disabled={busy || !importSecret.trim()} onPress={() => acquireWallet(true)} />
-          </>}
+          {!walletReady ? <ActivityIndicator color={colors.route} /> : wallet ? (
+            <>
+              <Text style={styles.address} selectable>{wallet.toSuiAddress()}</Text>
+              <Stat label={fr ? 'Solde' : 'Balance'} value={balance === null ? '—' : `${sui(balance)} SUI`} />
+              <Button label={fr ? 'Demander des SUI de test' : 'Request test SUI'} variant="secondary" disabled={busy} onPress={requestFunds} />
+              <Button label={fr ? 'Sauvegarder la clé' : 'Back up key'} variant="ghost" onPress={backup} />
+            </>
+          ) : (
+            <>
+              <Field label={fr ? 'Clé privée Sui' : 'Sui private key'} value={importSecret} onChangeText={setImportSecret} placeholder="suiprivkey1…" secure />
+              <Button label={fr ? 'Importer la clé' : 'Import key'} variant="secondary" disabled={busy || !importSecret.trim()} onPress={() => acquireWallet(true)} />
+            </>
+          )}
         </Card>
 
-        {market ? <>
-          <Card style={styles.section}>
-            <Text style={styles.sectionTitle}>{fr ? 'Prendre position' : 'Take a position'}</Text>
-            <View style={styles.sides}><Pressable style={[styles.side, side && styles.selectedSide]} onPress={() => setSide(true)}><Text style={styles.sideText}>OUI / YES</Text></Pressable><Pressable style={[styles.side, !side && styles.selectedSide]} onPress={() => setSide(false)}><Text style={styles.sideText}>NON / NO</Text></Pressable></View>
-            <Text style={styles.muted}>{side ? (fr ? 'Retard d’au moins 30 min' : 'Delay of at least 30 min') : (fr ? 'Retard de moins de 30 min' : 'Delay under 30 min')}</Text>
-            <Field label={fr ? 'Versement si gagnant (SUI)' : 'Payout if winning (SUI)'} value={quantity} onChangeText={setQuantity} placeholder="0.1" />
-            <Stat label={fr ? 'Prix actuel' : 'Current price'} value={premium === null ? '—' : `${sui(premium)} SUI`} />
-            <Text style={styles.muted}>{fr ? 'Le contrat recalcule le prix à l’achat. Si le prix a changé, la transaction échoue sans prélever la mise.' : 'The contract recalculates the price when buying. If it changed, the transaction fails without charging the stake.'}</Text>
-            <Button label={fr ? 'Acheter la position' : 'Buy position'} loading={busy} disabled={!canTrade} onPress={() => void run(() => buyTx(market, side, mist(quantity)))} />
-            {market.status === 0 && market.resolutionDeadlineMs < BigInt(now) ? <Button label={fr ? 'Annuler sans résultat' : 'Cancel unresolved market'} variant="secondary" disabled={!wallet || !matched || busy} onPress={() => void run(() => cancelTx(market.id))} /> : null}
-          </Card>
-
-          <Card style={styles.section}>
-            <Text style={styles.sectionTitle}>{fr ? 'Mes positions' : 'My positions'}</Text>
-            {positions.length === 0 ? <Text style={styles.muted}>{fr ? 'Aucune position pour ce portefeuille.' : 'No positions for this wallet.'}</Text> : positions.map((position) => <View key={position.id} style={styles.owned}>
-              <Text style={styles.ownedTitle}>{position.delayed ? 'OUI / YES' : 'NON / NO'} · {sui(position.quantity)} SUI</Text>
-              <Text style={styles.muted}>{fr ? 'Mise' : 'Stake'} {sui(position.premium)} SUI · {short(position.id)}</Text>
-              {market.status !== 0 ? <Text style={styles.verified}>{fr ? 'À recevoir' : 'Payout'} : {sui(payout(market, position))} SUI</Text> : null}
-              <Button label={fr ? 'Réclamer' : 'Claim'} variant="secondary" disabled={busy || !matched || market.status === 0} onPress={() => void run(() => claimTx(market.id, position.id))} />
-            </View>)}
-            <Text style={styles.muted}>{fr ? 'Après résolution, seule l’issue gagnante reçoit son versement. Si le marché expire sans résultat, chaque mise est remboursée.' : 'After resolution, only winning positions pay out. If the market expires unresolved, every stake is refunded.'}</Text>
-          </Card>
-
-          <Card style={styles.section}>
-            <Text style={styles.sectionTitle}>{fr ? 'Fournir la liquidité' : 'Provide liquidity'}</Text>
-            <Text style={styles.muted}>{fr ? 'Un apport supplémentaire est possible avant le premier achat. Les parts sont retirables après clôture, sous réserve des versements dus.' : 'Add funds before the first purchase. LP shares can be withdrawn after closure while preserving owed payouts.'}</Text>
-            <Field label={fr ? 'Apport (SUI)' : 'Deposit (SUI)'} value={lpAmount} onChangeText={setLpAmount} placeholder="0.1" />
-            <Button label={fr ? 'Ajouter de la liquidité' : 'Add liquidity'} variant="secondary" disabled={!wallet || busy || !matched || market.status !== 0 || market.yesExposure !== 0n || market.noExposure !== 0n} onPress={() => void run(() => liquidityTx(market.id, mist(lpAmount)))} />
-            {shares.map((share) => <View key={share.id} style={styles.owned}><Text style={styles.ownedTitle}>{fr ? 'Part LP' : 'LP share'} · {sui(share.amount)} SUI</Text><Text style={styles.muted}>{short(share.id)}</Text><Button label={fr ? 'Retirer' : 'Withdraw'} variant="secondary" disabled={busy || !matched || market.status === 0} onPress={() => void run(() => withdrawTx(market.id, share.id))} /></View>)}
-          </Card>
-          {resolverCap && market.status === 0 ? <Card style={styles.section}>
-            <Text style={styles.sectionTitle}>{fr ? 'Déclarer l’arrivée finale' : 'Report final arrival'}</Text>
-            <Text style={styles.muted}>{fr ? 'Ce portefeuille détient le droit de résolution. Renseigne seulement une arrivée finale confirmée par une source fiable ; le contrat calcule le seuil de 30 minutes.' : 'This wallet holds the resolution right. Enter only a final arrival confirmed by a reliable source; the contract computes the 30-minute threshold.'}</Text>
-            <Field label={fr ? 'Arrivée finale (ISO avec fuseau)' : 'Final arrival (ISO with time zone)'} value={arrival} onChangeText={setArrival} placeholder="2026-09-26T19:45:00+09:00" />
-            <Button label={fr ? 'Publier l’arrivée' : 'Publish arrival'} variant="secondary" disabled={busy || !matched || BigInt(now) < market.scheduledArrivalMs} onPress={() => void run(() => resolveTx(market.id, resolverCap, arrival))} />
-          </Card> : null}
-        </> : <Card style={styles.section}>
-          <Text style={styles.sectionTitle}>{fr ? 'Créer et amorcer le marché' : 'Create and fund market'}</Text>
-          <Text style={styles.muted}>{fr ? 'L’identité et les horaires prévus du vol sont inscrits sous forme d’empreinte. Le marché ferme dix minutes avant le départ.' : 'The flight identity and scheduled times are committed as a fingerprint. Trading closes ten minutes before departure.'}</Text>
-          <Field label={fr ? 'Liquidité initiale (SUI)' : 'Initial liquidity (SUI)'} value={seed} onChangeText={setSeed} placeholder="0.5" />
-          <Button label={fr ? 'Créer sur Sui testnet' : 'Create on Sui testnet'} loading={busy} disabled={!canCreate || busy} onPress={create} />
-        </Card>}
+        {market ? (
+          <>
+            <Card style={styles.section}>
+              <Text style={styles.sectionTitle}>{fr ? 'Fournir la liquidité' : 'Provide liquidity'}</Text>
+              <Field label={fr ? 'Apport (SUI)' : 'Deposit (SUI)'} value={lpAmount} onChangeText={setLpAmount} placeholder="0.1" />
+              <Button label={fr ? 'Ajouter de la liquidité' : 'Add liquidity'} variant="secondary" disabled={!wallet || busy || !matched || market.status !== 0 || market.yesExposure !== 0n || market.noExposure !== 0n} onPress={() => void run(() => liquidityTx(market.id, mist(lpAmount)))} />
+              {shares.map((share) => <View key={share.id} style={styles.owned}><Text style={styles.ownedTitle}>{fr ? 'Part LP' : 'LP share'} · {sui(share.amount)} SUI</Text><Text style={styles.muted}>{short(share.id)}</Text><Button label={fr ? 'Retirer' : 'Withdraw'} variant="secondary" disabled={busy || !matched || market.status === 0} onPress={() => void run(() => withdrawTx(market.id, share.id))} /></View>)}
+            </Card>
+            {resolverCap && market.status === 0 ? <Card style={styles.section}>
+              <Text style={styles.sectionTitle}>{fr ? 'Déclarer l’arrivée finale' : 'Report final arrival'}</Text>
+              <Field label={fr ? 'Arrivée finale (ISO avec fuseau)' : 'Final arrival (ISO with time zone)'} value={arrival} onChangeText={setArrival} placeholder="2026-09-26T19:45:00+09:00" />
+              <Button label={fr ? 'Publier l’arrivée' : 'Publish arrival'} variant="secondary" disabled={busy || !matched || BigInt(now) < market.scheduledArrivalMs} onPress={() => void run(() => resolveTx(market.id, resolverCap, arrival))} />
+            </Card> : null}
+          </>
+        ) : null}
         <Text style={styles.footer}>{fr ? 'Prototype Sui testnet. Aucun versement en monnaie réelle. La résolution dépend du détenteur du droit de publication de l’arrivée.' : 'Sui testnet prototype. No real-money payout. Resolution depends on the holder of the arrival reporting right.'}</Text>
       </ScrollView>
     </Screen>
@@ -326,6 +455,8 @@ const styles = StyleSheet.create({
   side: { flex: 1, padding: spacing.md, borderRadius: radii.control, backgroundColor: colors.surfaceElevated, alignItems: 'center', borderWidth: 1, borderColor: colors.separator },
   selectedSide: { borderColor: colors.route, backgroundColor: colors.enRouteSurface },
   sideText: { ...typography.monoFootnoteStrong, color: colors.textPrimary },
+  sideHint: { ...typography.monoMicro, color: colors.textSecondary },
+  balanceInline: { ...typography.monoMicro, color: colors.textTertiary, textAlign: 'center' },
   owned: { gap: spacing.sm, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.separator },
   ownedTitle: { ...typography.headline, color: colors.textPrimary },
   footer: { ...typography.footnote, color: colors.textTertiary, textAlign: 'center' },

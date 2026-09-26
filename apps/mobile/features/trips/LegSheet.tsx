@@ -81,12 +81,12 @@ export function LegSheet({ leg, now, changes, connection, onMore }: LegSheetProp
     <View style={styles.root}>
       <LiveStrip leg={leg} now={now} />
       <StatusBanner leg={leg} now={now} />
+      <MarketCard leg={leg} />
       <TimesBlock leg={leg} now={now} />
       <ActionBar leg={leg} onMore={onMore} />
 
       <View style={styles.cards}>
         <GoodToKnowCard leg={leg} connection={connection} />
-        <MarketCard leg={leg} />
         <TimetableCard leg={leg} />
         <WeatherCard leg={leg} />
 
