@@ -36,6 +36,13 @@ const TIGHTNESS_SURFACE = {
   relaxed: colors.onTimeSurface,
 } as const;
 
+const VEHICLE_LABEL: Record<Leg['modeName'], string> = {
+  flight: 'leg.aircraft',
+  train: 'leg.trainSet',
+  ferry: 'leg.vessel',
+  bus: 'leg.coach',
+};
+
 interface EndProps {
   place: Place;
   timing: Timing;
@@ -118,6 +125,13 @@ function TripRowView({
   const day = formatDay(leg.departure.scheduled, leg.origin.tz, language);
   const originCity = leg.origin.city ?? leg.origin.name;
   const destinationCity = leg.destination.city ?? leg.destination.name;
+  const location = leg.gate
+    ? t('leg.change.gate', { to: leg.gate })
+    : leg.platform
+      ? t('leg.change.platform', { to: leg.platform })
+      : null;
+  const terminal = leg.terminal ? t('leg.change.terminal', { to: leg.terminal }) : null;
+  const vehicle = leg.vehicle?.model ? `${t(VEHICLE_LABEL[leg.modeName])} · ${leg.vehicle.model}` : null;
 
   return (
     <ReanimatedSwipeable
@@ -183,6 +197,14 @@ function TripRowView({
           />
         </View>
 
+        {location || terminal || vehicle ? (
+          <View style={styles.quickFacts}>
+            {location ? <Text style={styles.quickFact}>{location}</Text> : null}
+            {terminal ? <Text style={styles.quickFact}>{terminal}</Text> : null}
+            {vehicle ? <Text style={styles.quickFact} numberOfLines={1}>{vehicle}</Text> : null}
+          </View>
+        ) : null}
+
         {isLive(leg.liveStatus) ? (
           <View style={styles.progress}>
             <ProgressLine progress={legProgressAt(leg, now)} tint={toneSignal(countdown.tone)} />
@@ -198,6 +220,13 @@ function TripRowView({
           </Text>
           <Symbol name="chevron.right" size={12} color={toneColor(countdown.tone)} />
         </View>
+
+        {leg.delayMinutes > 0 && leg.delayReason ? (
+          <View style={styles.delayReason}>
+            <Symbol name="exclamationmark.triangle.fill" size={14} color={colors.delayedInk} />
+            <Text style={styles.delayReasonText} numberOfLines={2}>{leg.delayReason}</Text>
+          </View>
+        ) : null}
 
         {connection ? (
           <View style={styles.connection}>
@@ -303,6 +332,31 @@ const styles = StyleSheet.create({
   },
   progress: {
     paddingVertical: spacing.xs,
+  },
+  quickFacts: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  quickFact: {
+    ...typography.monoFootnote,
+    color: colors.textSecondary,
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radii.control,
+    overflow: 'hidden',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    maxWidth: '100%',
+  },
+  delayReason: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  delayReasonText: {
+    ...typography.footnote,
+    color: colors.delayedInk,
+    flex: 1,
   },
   ends: {
     flexDirection: 'row',
