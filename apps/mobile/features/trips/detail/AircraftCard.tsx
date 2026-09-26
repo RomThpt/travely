@@ -2,10 +2,13 @@ import type { Leg } from '@travely/shared/trip';
 import { Image } from 'expo-image';
 import { memo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 
 import { DetailCard } from '@/components/ui';
 import { useI18n } from '@/features/settings/useI18n';
 import { colors, radii, spacing, typography } from '@/theme';
+
+import { airlineTailColor } from './airlineLivery';
 
 const AIRCRAFT_IMAGE = require('../../../assets/aircraft-side.png');
 
@@ -14,6 +17,7 @@ function AircraftCardView({ leg }: { leg: Leg }) {
   if (leg.modeName !== 'flight' || !leg.vehicle?.model) return null;
 
   const details = [leg.vehicle.registration, leg.vehicle.callsign].filter(Boolean);
+  const tailColor = airlineTailColor(leg.identity.operator);
 
   return (
     <DetailCard
@@ -27,13 +31,27 @@ function AircraftCardView({ leg }: { leg: Leg }) {
       </View>
       <View style={styles.stage}>
         <View style={styles.glow} />
-        <Image
-          source={AIRCRAFT_IMAGE}
-          style={styles.image}
-          contentFit="contain"
-          accessibilityLabel={t('leg.aircraftImage', { model: leg.vehicle.model })}
-          accessibilityIgnoresInvertColors
-        />
+        <View style={styles.aircraft}>
+          <Image
+            source={AIRCRAFT_IMAGE}
+            style={StyleSheet.absoluteFill}
+            contentFit="contain"
+            accessibilityLabel={t('leg.aircraftImage', { model: leg.vehicle.model })}
+            accessibilityIgnoresInvertColors
+          />
+          <Svg
+            pointerEvents="none"
+            style={StyleSheet.absoluteFill}
+            viewBox="0 0 2167 726"
+            preserveAspectRatio="xMidYMid meet"
+          >
+            <Path
+              d="M1695 378 C1765 339 1817 174 1907 62 Q1933 44 1972 57 L1931 380 Z"
+              fill={tailColor}
+              fillOpacity={0.82}
+            />
+          </Svg>
+        </View>
       </View>
       <Text style={styles.caption}>{t('leg.aircraftIllustration')}</Text>
     </DetailCard>
@@ -78,7 +96,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     backgroundColor: 'rgba(10, 156, 245, 0.12)',
   },
-  image: {
+  aircraft: {
     width: '100%',
     height: 126,
   },
